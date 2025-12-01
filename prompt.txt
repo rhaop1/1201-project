@@ -1,0 +1,177 @@
+천체물리학 전체 이론을 연구자 수준으로 정리하고, 고급 논문 요약, 전문 게시판, 사용자 인증 시스템, 데이터 아키텍처, 관측 장비 사양, 수학적 모델링, React 기반 UI까지 포함한 고기술·고학술 웹사이트 설계를 생성해 주세요. 아래 모든 요구사항을 충족한 문서를 작성해야 합니다.
+
+────────────────────────────────────
+[1] 전체 목표: 학술·기술적 깊이
+────────────────────────────────────
+- 대학원 수준의 천체물리학 이론을 **학제적 깊이**로 정리한다.
+- 현대 천체물리학에서 사용하는 **수학적·물리적 모델(상미분방정식, 텐서, 방사전달, 유체역학, N-body, GR metric 등)을 포함**한다.
+- 필수적으로 **일반상대성이론 + 양자장론적 효과가 포함된 현대 블랙홀 연구 내용**을 포함한다.
+- 관측 천문학은 **스펙트로스코피·광도곡선·간섭계·다파장 분석 기법**까지 기술해야 한다.
+- 최신 연구(예: JWST, LIGO/Virgo, EHT) 기반 예시도 포함한다.
+- 논문 요약은 실제 학술논문 수준으로 **방법론·수식·데이터 분석 절차·우도함수/모델링**까지 구조적으로 설명한다.
+- 전체 웹사이트는 실제 서비스 수준의 **React 기반 기술 사양**을 포함한다.
+
+────────────────────────────────────
+[2] 천체물리학 이론 섹션(초기획 아님, 연구자 수준)
+────────────────────────────────────
+각 이론 페이지는 반드시 다음 내용을 포함:
+
+1) 개념/현상 정의  
+2) 수학적 모델  
+   - 주요 방정식(LaTeX)  
+   - 해당 방정식이 도출되는 근본 물리  
+   - 근사/가정/경계 조건  
+3) 관측적 증거  
+   - 관측 장비 스펙(S/N, 해상도, 파장대, 간섭계 baseline 등)  
+4) 현대 연구에서의 적용  
+5) 대표 논문 및 주요 저자  
+6) 계산/시뮬레이션 모델(N-body, MHD 등)
+
+**반드시 포함해야 하는 이론 목록:**
+
+① 일반 상대성이론  
+- Schwarzschild / Kerr metric  
+- Geodesic equation  
+- Shapiro delay, gravitational redshift  
+- Einstein Field Equation 도출 과정 간단 버전
+
+② 항성 물리학  
+- 방사전달방정식  
+- Lane–Emden equation  
+- 항성 진화(핵융합 사슬, CNO 사이클)
+
+③ 블랙홀 천체물리  
+- Kerr black hole ergosphere  
+- ISCO 궤도  
+- Hawking Radiation (QFT in curved spacetime)
+
+④ 은하 동역학  
+- Jeans equation  
+- rotation curve modeling  
+- ΛCDM 기본 프레임워크
+
+⑤ 우주론  
+- Friedmann equations  
+- CMB anisotropy power spectrum  
+- 다크에너지 EOS parameter w(z)
+
+⑥ 관측 천문학  
+- 스펙트럼 분석: Equivalent Width, Voigt profile  
+- CCD photometry, noise model  
+- X-ray/IR/Radio 관측 장비 구조
+
+────────────────────────────────────
+[3] 논문 요약(고학술 형태)
+────────────────────────────────────
+각 논문 요약 페이지는 다음 구조를 반드시 갖춘다.
+
+1) 서지 정보(저자, 연도, DOI, 저널 등)  
+2) 연구 배경 및 기존 연구의 한계  
+3) 이론적 기반  
+   - 해당 논문에서 사용된 방정식·모델 완전 정리  
+4) 데이터/관측 장비  
+   - 장비 스펙 (파장, 해상도, 노이즈, 적분시간)  
+   - 분석 파이프라인  
+5) 수식 기반 방법론  
+   - Likelihood function  
+   - parameter inference(Bayesian)  
+   - Simulation/forward modeling 사용 여부  
+6) 핵심 결과  
+7) 도표 해석(이미지 없이 텍스트로 도표 의미 설명)  
+8) 논문의 영향력·의미·한계  
+9) 후속 연구 아이디어 제안
+
+논문 예시는  
+- LIGO/Virgo 중력파 검출  
+- EHT 블랙홀 이미지  
+- JWST 은하 초기 형성 연구  
+- 암흑물질 회전곡선 논문  
+등 **최소 3~5개를 실제 학술 수준으로 요약**한다.
+
+────────────────────────────────────
+[4] React + 기술 아키텍처 (엔터프라이즈 수준)
+────────────────────────────────────
+아래 항목을 반드시 포함:
+
+1) **React 컴포넌트 트리**  
+   - Layout  
+   - TheoryPage  
+   - EquationRenderer(KaTeX)  
+   - PaperSummaryPage  
+   - BoardPage  
+   - AuthPage  
+   - Glossary  
+   - Profile  
+
+2) **라우팅 구조(React Router)**  
+   - /theory/:category/:topic  
+   - /paper/:id  
+   - /board/:category/:postId  
+   - /auth/login, /auth/signup  
+   - /profile/:id  
+
+3) **상태관리(Recoil 또는 Redux Toolkit)**  
+   - userState (JWT, 권한, 프로필)  
+   - theoryState  
+   - paperState  
+   - boardState  
+   - glossaryState  
+
+4) **인증 시스템**  
+   - JWT Access/Refresh Token  
+   - axios interceptor를 통한 자동 토큰 갱신  
+   - 권한별 라우팅 가드(Admin, User 등)
+
+5) **백엔드 API 스펙**  
+각 엔드포인트는 Request/Response JSON 예시 포함
+
+POST /api/auth/login
+POST /api/auth/signup
+GET /api/theory/:topic
+GET /api/papers
+GET /api/board/:category
+POST /api/board/:category
+
+pgsql
+코드 복사
+
+6) **데이터 구조 및 스키마(실 DB 스키마 수준)**  
+예:  
+users(id PK, email unique, passwordHash, role, createdAt)  
+papers(id PK, metadata JSON, equations JSON, methods TEXT, etc.)  
+theory(id, equationSet JSON, observationalData JSON)  
+
+────────────────────────────────────
+[5] 고급 데이터/수학/시뮬레이션 포함
+────────────────────────────────────
+아래의 심화 요소를 반드시 포함해 작성하도록 요구:
+
+1) 천체물리학 수식은 LaTeX로 정확히 표기  
+2) 특정 현상(N-body, MHD 등)의 편미분방정식 포함  
+3) 관측 데이터의 신호처리 과정 설명(FT, PCA 등)  
+4) 데이터 분석 파이프라인(예: 중력파 matched filtering pipeline)  
+5) 관측 장비(예: JWST NIRCam)의 스펙 요약  
+6) 암흑물질 모델링 (NFW profile 수식 포함)
+
+────────────────────────────────────
+[6] 페이지별 예시 콘텐츠(필수)
+────────────────────────────────────
+아래 예시를 포함하도록 지시:
+
+1) Kerr metric 방정식 예시  
+2) Lane-Emden n=3 해석  
+3) JWST 기반 고적색편이 은하의 스펙트럼 분석 예시  
+4) 중력파 파형 모형(h_+(t), h_×(t) 형태)  
+5) 블랙홀 ISCO 반지름 계산 예시  
+6) 게시판 예시 게시글(학술적 형태)  
+7) 용어사전 용어 20개(A–Z)
+
+────────────────────────────────────
+[7] 전체 문서 작성 방식
+────────────────────────────────────
+- 학술논문 형식의 문장 사용  
+- 이론 설명은 다단계 구조로  
+- Web app 기획은 기술 문서 형식으로  
+- 최종 문서는 “실제 서비스×학술 백과사전” 수준이어야 함
+
+위 모든 조건을 충족하는 **고학술×고기술 통합 기획서+콘텐츠 세트**를 작성해 주세요.
