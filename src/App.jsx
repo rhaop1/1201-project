@@ -20,7 +20,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 export default function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/1201-project/">
         <Routes>
           {/* 인증 페이지 (Layout 없음) */}
           <Route path="/login" element={<Login />} />
