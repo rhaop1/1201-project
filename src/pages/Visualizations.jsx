@@ -58,19 +58,19 @@ export default function Visualizations() {
     { temp: 8000, mag: 12, type: 'White Dwarfs' },
   ];
 
-  // 중력파 파형
+  // 중력파 파형 (시각화 스케일: 10^-21 단위로 표시)
   const gwWaveformData = [
-    { t: 0, h: 0.00001 },
-    { t: 0.1, h: 0.000015 },
-    { t: 0.2, h: 0.000025 },
-    { t: 0.3, h: 0.000040 },
-    { t: 0.4, h: 0.000065 },
-    { t: 0.5, h: 0.000100 },
-    { t: 0.6, h: 0.000150 },
-    { t: 0.7, h: 0.000220 },
-    { t: 0.8, h: 0.000320 },
-    { t: 0.9, h: 0.000450 },
-    { t: 1.0, h: 0.0005 },
+    { t: 0, h: 0.5 },
+    { t: 0.1, h: 1.5 },
+    { t: 0.2, h: 2.5 },
+    { t: 0.3, h: 4.0 },
+    { t: 0.4, h: 6.5 },
+    { t: 0.5, h: 10 },
+    { t: 0.6, h: 15 },
+    { t: 0.7, h: 22 },
+    { t: 0.8, h: 32 },
+    { t: 0.9, h: 45 },
+    { t: 1.0, h: 50 },
   ];
 
   // 태외행성 통과 광도
@@ -95,13 +95,13 @@ export default function Visualizations() {
     { day: 50, mag: -4 },
   ];
 
-  // WIMP 검출 한계 (소수 위 데이터로 Recharts 호환)
+  // WIMP 검출 한계 (시각화 스케일: 로그 스케일)
   const wimpDetectionData = [
-    { mass: 10, currentLimit: 1e-42, futureLimit: 1e-47 },
-    { mass: 50, currentLimit: 1.5e-42, futureLimit: 1.2e-47 },
-    { mass: 100, currentLimit: 1e-43, futureLimit: 1e-48 },
-    { mass: 500, currentLimit: 2e-43, futureLimit: 1.5e-48 },
-    { mass: 1000, currentLimit: 1e-44, futureLimit: 1e-49 },
+    { mass: 10, currentLimit: 100, futureLimit: 0.1 },
+    { mass: 50, currentLimit: 150, futureLimit: 0.12 },
+    { mass: 100, currentLimit: 10, futureLimit: 0.01 },
+    { mass: 500, currentLimit: 20, futureLimit: 0.015 },
+    { mass: 1000, currentLimit: 1, futureLimit: 0.001 },
   ];
 
   const colors = {
@@ -284,7 +284,7 @@ export default function Visualizations() {
             <ComposedChart data={gwWaveformData}>
               <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
               <XAxis dataKey="t" label={{ value: '시간 (초)', position: 'bottom', offset: 10 }} tick={{ fill: colors.text }} />
-              <YAxis scale="log" label={{ value: '변형률 h(t)', angle: -90, position: 'insideLeft' }} tick={{ fill: colors.text }} />
+              <YAxis label={{ value: '변형률 h(t) × 10^-21', angle: -90, position: 'insideLeft' }} tick={{ fill: colors.text }} />
               <Tooltip contentStyle={{ backgroundColor: isDark ? '#1f2937' : '#ffffff' }} />
               <Line type="monotone" dataKey="h" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
             </ComposedChart>
@@ -385,8 +385,8 @@ export default function Visualizations() {
           <ResponsiveContainer width="100%" height={350}>
             <ComposedChart data={wimpDetectionData}>
               <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-              <XAxis dataKey="mass" scale="log" label={{ value: 'WIMP 질량 (GeV/c²)', position: 'bottom', offset: 10 }} tick={{ fill: colors.text }} />
-              <YAxis scale="log" label={{ value: '산란 단면적 (cm²)', angle: -90, position: 'insideLeft' }} tick={{ fill: colors.text }} />
+              <XAxis dataKey="mass" label={{ value: 'WIMP 질량 (GeV/c²)', position: 'bottom', offset: 10 }} tick={{ fill: colors.text }} />
+              <YAxis label={{ value: '상대 민감도 (임의 단위)', angle: -90, position: 'insideLeft' }} tick={{ fill: colors.text }} />
               <Tooltip contentStyle={{ backgroundColor: isDark ? '#1f2937' : '#ffffff' }} />
               <Legend />
               <Line type="monotone" dataKey="currentLimit" stroke="#ef4444" strokeWidth={2} name="현재 한계 (XENON1T)" />
