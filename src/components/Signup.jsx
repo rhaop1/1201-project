@@ -80,20 +80,27 @@ export default function Signup() {
     setSuccessMessage('');
 
     try {
-      // Firebase 회원가입 시도, 실패 시 로컬스토리지 폴백
+      // Firebase 회원가입 시도 (타임아웃 설정)
       let registered = false;
+
       try {
-        await firebaseSignUp(formData.email, formData.password, {
+        const firebasePromise = firebaseSignUp(formData.email, formData.password, {
           username: formData.username,
           affiliation: formData.affiliation,
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Firebase 타임아웃')), 3000)
+        );
+
+        await Promise.race([firebasePromise, timeoutPromise]);
         registered = true;
+        console.log('✓ Firebase 회원가입 성공');
       } catch (firebaseErr) {
-        console.warn('Firebase 회원가입 실패, 로컬 저장으로 전환:', firebaseErr.message);
+        console.warn('Firebase 회원가입 실패:', firebaseErr.message);
         
         // 로컬스토리지 기반 폴백 회원가입
         const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
-        const userKey = btoa(formData.email); // 간단한 암호화
+        const userKey = btoa(formData.email);
         
         if (storedUsers[userKey]) {
           setErrors({
@@ -105,7 +112,7 @@ export default function Signup() {
 
         storedUsers[userKey] = {
           email: formData.email,
-          password: btoa(formData.password), // 간단한 인코딩 (실제로는 bcrypt 사용)
+          password: btoa(formData.password),
           username: formData.username,
           affiliation: formData.affiliation,
           createdAt: new Date().toISOString(),
@@ -113,6 +120,7 @@ export default function Signup() {
 
         localStorage.setItem('registeredUsers', JSON.stringify(storedUsers));
         registered = true;
+        console.log('✓ 로컬스토리지 회원가입 성공');
       }
 
       if (registered) {
@@ -122,8 +130,9 @@ export default function Signup() {
         }, 2000);
       }
     } catch (err) {
+      console.error('회원가입 오류:', err);
       setErrors({
-        submit: err.message || '회원가입 중 오류가 발생했습니다.',
+        submit: '회원가입 중 오류가 발생했습니다. 다시 시도해주세요.',
       });
     } finally {
       setLoading(false);

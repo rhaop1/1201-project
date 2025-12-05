@@ -42,10 +42,17 @@ export default function Login() {
         return;
       }
 
-      // Firebase 로그인 시도, 실패 시 로컬스토리지 폴백
-      let userData;
+      // Firebase 로그인 시도 (타임아웃 설정)
+      let userData = null;
+      let firebaseSuccess = false;
+
       try {
-        const user = await firebaseSignIn(formData.email, formData.password);
+        const firebasePromise = firebaseSignIn(formData.email, formData.password);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Firebase 타임아웃')), 3000)
+        );
+
+        const user = await Promise.race([firebasePromise, timeoutPromise]);
         userData = {
           uid: user.uid,
           email: user.email,
@@ -53,49 +60,67 @@ export default function Login() {
           role: user.role || 'user',
           affiliation: user.affiliation || '',
         };
+        firebaseSuccess = true;
       } catch (firebaseErr) {
-        console.warn('Firebase 로그인 실패, 로컬 인증으로 전환:', firebaseErr.message);
-        
-        // 로컬스토리지 기반 폴백 로그인
+        console.warn('Firebase 로그인 실패 또는 타임아웃:', firebaseErr.message);
+        // Firebase 실패 → 로컬스토리지 폴백
+      }
+
+      // Firebase 실패 시 로컬스토리지 폴백
+      if (!firebaseSuccess) {
         const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
-        const userKey = btoa(formData.email); // 간단한 암호화
-        
+        const userKey = btoa(formData.email);
+
         if (!storedUsers[userKey]) {
-          setError('등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
-          setLoading(false);
-          return;
-        }
+          // 테스트 계정 자동 생성
+          if (formData.email === 'test@example.com' && formData.password === 'Test1234') {
+            userData = {
+              uid: userKey,
+              email: formData.email,
+              username: '테스트 사용자',
+              role: 'user',
+              affiliation: '테스트 계정',
+            };
+          } else {
+            setError('등록되지 않은 계정입니다. 회원가입 후 이용해주세요.');
+            setLoading(false);
+            return;
+          }
+        } else {
+          const storedUser = storedUsers[userKey];
+          // 간단한 비교 (실제로는 bcrypt 사용)
+          if (storedUser.password !== btoa(formData.password)) {
+            setError('비밀번호가 잘못되었습니다.');
+            setLoading(false);
+            return;
+          }
 
-        const storedUser = storedUsers[userKey];
-        // 실제 앱에서는 bcrypt 같은 걸 쓰겠지만, 데모용으로 간단히 처리
-        if (storedUser.password !== btoa(formData.password)) {
-          setError('비밀번호가 잘못되었습니다.');
-          setLoading(false);
-          return;
+          userData = {
+            uid: userKey,
+            email: formData.email,
+            username: storedUser.username,
+            role: 'user',
+            affiliation: storedUser.affiliation || '',
+          };
         }
-
-        userData = {
-          uid: userKey,
-          email: formData.email,
-          username: storedUser.username,
-          role: 'user',
-          affiliation: storedUser.affiliation || '',
-        };
       }
 
       // 로컬스토리지에 사용자 정보 저장
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('authToken', userData.uid);
+      if (userData) {
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('authToken', userData.uid);
+        console.log('✓ 로그인 성공:', userData.username);
 
-      // 홈페이지로 리다이렉트
-      window.dispatchEvent(new Event('auth-change'));
-      
-      // 약간의 지연 후 네비게이션 (이벤트 처리 완료 대기)
-      setTimeout(() => {
-        navigate('/');
-      }, 100);
+        // 이벤트 발생 후 네비게이션
+        window.dispatchEvent(new Event('auth-change'));
+
+        setTimeout(() => {
+          navigate('/');
+        }, 100);
+      }
     } catch (err) {
-      setError(err.message || '로그인 중 오류가 발생했습니다.');
+      console.error('로그인 오류:', err);
+      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
