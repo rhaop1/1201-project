@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { forumCategories, forumPosts } from '../data/content';
 
 export default function Forum() {
@@ -122,23 +123,25 @@ export default function Forum() {
       {/* 게시물 목록 */}
       <div className="space-y-3 sm:space-y-4">
         {filteredPosts.map((post) => (
-          <div key={post.id} className="bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-300 p-4 sm:p-6 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition cursor-pointer">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className="text-xs bg-gray-200 dark:bg-dark-300 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
-                    {forumCategories.find((c) => c.id === post.category)?.name}
-                  </span>
+          <Link key={post.id} to={`/forum/${post.id}`}>
+            <div className="bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-300 p-4 sm:p-6 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition cursor-pointer">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-xs bg-gray-200 dark:bg-dark-300 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
+                      {forumCategories.find((c) => c.id === post.category)?.name}
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 break-words">{post.title}</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{post.content}</p>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-2">
+                    {post.author} · {post.date}
+                  </p>
                 </div>
-                <h3 className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 break-words">{post.title}</h3>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{post.content}</p>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  {post.author} · {post.date}
-                </p>
+                <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">댓글 {post.replies}</span>
               </div>
-              <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">댓글 {post.replies}</span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

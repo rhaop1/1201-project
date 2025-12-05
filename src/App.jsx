@@ -6,6 +6,7 @@ import Concepts from './pages/Concepts';
 import ConceptDetail from './pages/ConceptDetail';
 import PaperSummary from './pages/PaperSummary';
 import Forum from './pages/Forum';
+import ForumPostDetail from './pages/ForumPostDetail';
 import Glossary from './pages/Glossary';
 import References from './pages/References';
 import Profile from './pages/Profile';
@@ -43,6 +44,14 @@ export default function App() {
                   <Forum />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/forum/:postId"
+              element={
+                <ProtectedRoute>
+                  <ForumPostDetail />
+                </ProtectedRoute>
+              }
             />
             <Route
               path="/profile"

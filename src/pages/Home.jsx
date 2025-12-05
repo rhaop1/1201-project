@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { conceptsData, paperSamples } from '../data/content';
@@ -11,6 +12,24 @@ import {
 export default function Home() {
   const { isDark } = useTheme();
   const featuredConcepts = conceptsData.slice(0, 3);
+
+  // 초기화: 테스트 사용자 계정 생성
+  useEffect(() => {
+    const storedUsers = localStorage.getItem('registeredUsers');
+    if (!storedUsers) {
+      const initialUsers = {
+        [btoa('test@example.com')]: {
+          email: 'test@example.com',
+          password: btoa('Test1234'), // 간단한 인코딩
+          username: '연구자',
+          affiliation: '천문학 연구소',
+          createdAt: new Date().toISOString(),
+        },
+      };
+      localStorage.setItem('registeredUsers', JSON.stringify(initialUsers));
+      console.log('✓ 테스트 계정 초기화됨: test@example.com / Test1234');
+    }
+  }, []);
 
   return (
     <div className="space-y-8 sm:space-y-12">

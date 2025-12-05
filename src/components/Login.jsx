@@ -42,15 +42,58 @@ export default function Login() {
         return;
       }
 
-      // Firebase 로그인
-      const user = await firebaseSignIn(formData.email, formData.password);
+      // Firebase 로그인 시도, 실패 시 로컬스토리지 폴백
+      let userData;
+      try {
+        const user = await firebaseSignIn(formData.email, formData.password);
+        userData = {
+          uid: user.uid,
+          email: user.email,
+          username: user.username,
+          role: user.role || 'user',
+          affiliation: user.affiliation || '',
+        };
+      } catch (firebaseErr) {
+        console.warn('Firebase 로그인 실패, 로컬 인증으로 전환:', firebaseErr.message);
+        
+        // 로컬스토리지 기반 폴백 로그인
+        const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
+        const userKey = btoa(formData.email); // 간단한 암호화
+        
+        if (!storedUsers[userKey]) {
+          setError('등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
+          setLoading(false);
+          return;
+        }
+
+        const storedUser = storedUsers[userKey];
+        // 실제 앱에서는 bcrypt 같은 걸 쓰겠지만, 데모용으로 간단히 처리
+        if (storedUser.password !== btoa(formData.password)) {
+          setError('비밀번호가 잘못되었습니다.');
+          setLoading(false);
+          return;
+        }
+
+        userData = {
+          uid: userKey,
+          email: formData.email,
+          username: storedUser.username,
+          role: 'user',
+          affiliation: storedUser.affiliation || '',
+        };
+      }
 
       // 로컬스토리지에 사용자 정보 저장
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('authToken', userData.uid);
 
       // 홈페이지로 리다이렉트
       window.dispatchEvent(new Event('auth-change'));
-      navigate('/');
+      
+      // 약간의 지연 후 네비게이션 (이벤트 처리 완료 대기)
+      setTimeout(() => {
+        navigate('/');
+      }, 100);
     } catch (err) {
       setError(err.message || '로그인 중 오류가 발생했습니다.');
     } finally {

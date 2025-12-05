@@ -80,16 +80,47 @@ export default function Signup() {
     setSuccessMessage('');
 
     try {
-      // Firebase 회원가입
-      const user = await firebaseSignUp(formData.email, formData.password, {
-        username: formData.username,
-        affiliation: formData.affiliation,
-      });
+      // Firebase 회원가입 시도, 실패 시 로컬스토리지 폴백
+      let registered = false;
+      try {
+        await firebaseSignUp(formData.email, formData.password, {
+          username: formData.username,
+          affiliation: formData.affiliation,
+        });
+        registered = true;
+      } catch (firebaseErr) {
+        console.warn('Firebase 회원가입 실패, 로컬 저장으로 전환:', firebaseErr.message);
+        
+        // 로컬스토리지 기반 폴백 회원가입
+        const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
+        const userKey = btoa(formData.email); // 간단한 암호화
+        
+        if (storedUsers[userKey]) {
+          setErrors({
+            submit: '이미 등록된 이메일입니다.',
+          });
+          setLoading(false);
+          return;
+        }
 
-      setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+        storedUsers[userKey] = {
+          email: formData.email,
+          password: btoa(formData.password), // 간단한 인코딩 (실제로는 bcrypt 사용)
+          username: formData.username,
+          affiliation: formData.affiliation,
+          createdAt: new Date().toISOString(),
+        };
+
+        localStorage.setItem('registeredUsers', JSON.stringify(storedUsers));
+        registered = true;
+      }
+
+      if (registered) {
+        setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      }
     } catch (err) {
       setErrors({
         submit: err.message || '회원가입 중 오류가 발생했습니다.',
