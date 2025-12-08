@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { virtualLogin } from '../utils/virtualAuth';
+import { gitHubPageSignIn, saveLoginState } from '../utils/firebaseAuthGitHub';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [authMethod, setAuthMethod] = useState('auto'); // 'auto', 'firebase', 'local'
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -42,36 +44,74 @@ export default function Login() {
         return;
       }
 
-      // virtualAuth를 사용한 로그인 시도
-      try {
-        const user = await virtualLogin(formData.email, formData.password);
-        
-        // 로그인 성공
-        const userData = {
-          uid: user.uid,
-          email: user.email,
-          username: user.username,
-          role: user.role || 'user',
-          authProvider: 'virtual',
-        };
+      let user = null;
 
-        localStorage.setItem('user', JSON.stringify(userData));
-        localStorage.setItem('authToken', user.token);
-        localStorage.setItem('isAuthenticated', 'true');
+      // Firebase 시도 (자동 또는 명시)
+      if (authMethod === 'auto' || authMethod === 'firebase') {
+        try {
+          user = await gitHubPageSignIn(formData.email, formData.password);
+          
+          const userData = {
+            uid: user.uid,
+            email: user.email,
+            username: user.username,
+            role: 'user',
+            authProvider: user.isLocal ? 'firebase-local' : 'firebase',
+          };
 
-        console.log('✅ 로그인 성공 (Virtual Auth):', userData.username);
-        window.dispatchEvent(new Event('auth-change'));
+          saveLoginState(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+          localStorage.setItem('authToken', user.uid);
+          localStorage.setItem('isAuthenticated', 'true');
 
-        setTimeout(() => navigate('/'), 500);
-      } catch (virtualErr) {
-        console.error('Virtual auth 실패:', virtualErr);
-        setError('로그인 실패: 등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
-        setLoading(false);
+          console.log(`✅ 로그인 성공 (${user.isLocal ? '로컬 백업' : 'Firebase'}):`);
+          window.dispatchEvent(new Event('auth-change'));
+
+          setTimeout(() => navigate('/'), 500);
+          return;
+        } catch (firebaseErr) {
+          console.warn('Firebase 로그인 실패:', firebaseErr.message);
+          if (authMethod === 'firebase') {
+            setError(firebaseErr.message);
+            setLoading(false);
+            return;
+          }
+          // auto 모드에서 실패 시 virtualAuth 시도
+        }
       }
+
+      // VirtualAuth 시도 (자동 또는 명시)
+      if (authMethod === 'auto' || authMethod === 'local') {
+        try {
+          user = await virtualLogin(formData.email, formData.password);
+          
+          const userData = {
+            uid: user.uid,
+            email: user.email,
+            username: user.username,
+            role: user.role || 'user',
+            authProvider: 'virtual',
+          };
+
+          localStorage.setItem('user', JSON.stringify(userData));
+          localStorage.setItem('authToken', user.token);
+          localStorage.setItem('isAuthenticated', 'true');
+
+          console.log('✅ 로그인 성공 (Virtual Auth):', userData.username);
+          window.dispatchEvent(new Event('auth-change'));
+
+          setTimeout(() => navigate('/'), 500);
+          return;
+        } catch (virtualErr) {
+          console.warn('Virtual auth 실패:', virtualErr.message);
+        }
+      }
+
+      // 모든 방식 실패
+      setError('로그인 실패: 등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
     } catch (err) {
       console.error('로그인 오류:', err);
       setError('로그인 중 오류가 발생했습니다.');
-      setLoading(false);
     } finally {
       setLoading(false);
     }
@@ -111,6 +151,58 @@ export default function Login() {
           >
             천문물리학 연구 플랫폼에 접속하세요
           </motion.p>
+        </div>
+
+        {/* 인증 방식 선택 */}
+        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-3">인증 방식 선택:</p>
+          <div className="space-y-2">
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'auto'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="auto"
+                checked={authMethod === 'auto'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">자동 (Firebase 우선)</span>
+            </label>
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'firebase'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="firebase"
+                checked={authMethod === 'firebase'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Firebase 만 사용</span>
+            </label>
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'local'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="local"
+                checked={authMethod === 'local'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">로컬 저장소만 사용</span>
+            </label>
+          </div>
         </div>
 
         {/* 에러 메시지 */}

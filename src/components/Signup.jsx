@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { firebaseSignUp } from '../utils/firebaseService';
+import { gitHubPageSignUp, saveLoginState } from '../utils/firebaseAuthGitHub';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export default function Signup() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [authMethod, setAuthMethod] = useState('auto'); // 'auto', 'firebase', 'local'
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -80,32 +81,40 @@ export default function Signup() {
     setSuccessMessage('');
 
     try {
-      // Firebase 회원가입 시도 (타임아웃 설정)
-      let registered = false;
+      let user = null;
 
-      try {
-        const firebasePromise = firebaseSignUp(formData.email, formData.password, {
-          username: formData.username,
-          affiliation: formData.affiliation,
-        });
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firebase 타임아웃')), 3000)
-        );
+      // Firebase 시도
+      if (authMethod === 'auto' || authMethod === 'firebase') {
+        try {
+          user = await gitHubPageSignUp(formData.email, formData.password, {
+            username: formData.username,
+            affiliation: formData.affiliation,
+          });
 
-        await Promise.race([firebasePromise, timeoutPromise]);
-        registered = true;
-        console.log('✓ Firebase 회원가입 성공');
-      } catch (firebaseErr) {
-        console.warn('Firebase 회원가입 실패:', firebaseErr.message);
-        
-        // 로컬스토리지 기반 폴백 회원가입
+          console.log('✓ 회원가입 성공:', user.username);
+          setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
+          
+          setTimeout(() => {
+            navigate('/login');
+          }, 2000);
+          return;
+        } catch (firebaseErr) {
+          console.warn('Firebase 회원가입 실패:', firebaseErr.message);
+          if (authMethod === 'firebase') {
+            setErrors({ submit: firebaseErr.message });
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // 로컬 방식 사용 (auto 모드에서 Firebase 실패 시)
+      if (authMethod === 'auto' || authMethod === 'local') {
         const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
         const userKey = btoa(formData.email);
         
         if (storedUsers[userKey]) {
-          setErrors({
-            submit: '이미 등록된 이메일입니다.',
-          });
+          setErrors({ submit: '이미 등록된 이메일입니다.' });
           setLoading(false);
           return;
         }
@@ -119,11 +128,8 @@ export default function Signup() {
         };
 
         localStorage.setItem('registeredUsers', JSON.stringify(storedUsers));
-        registered = true;
-        console.log('✓ 로컬스토리지 회원가입 성공');
-      }
-
-      if (registered) {
+        console.log('✓ 로컬 저장소 회원가입 성공');
+        
         setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
         setTimeout(() => {
           navigate('/login');
@@ -173,6 +179,58 @@ export default function Signup() {
           >
             천문물리학 연구 커뮤니티에 참가하세요
           </motion.p>
+        </div>
+
+        {/* 인증 방식 선택 */}
+        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-3">인증 방식 선택:</p>
+          <div className="space-y-2">
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'auto'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="auto"
+                checked={authMethod === 'auto'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">자동 (Firebase 우선)</span>
+            </label>
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'firebase'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="firebase"
+                checked={authMethod === 'firebase'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Firebase 만 사용</span>
+            </label>
+            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
+              authMethod === 'local'
+                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
+                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
+            }`}>
+              <input
+                type="radio"
+                name="authMethod"
+                value="local"
+                checked={authMethod === 'local'}
+                onChange={(e) => setAuthMethod(e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">로컬 저장소만 사용</span>
+            </label>
+          </div>
         </div>
 
         {/* 성공 메시지 */}
