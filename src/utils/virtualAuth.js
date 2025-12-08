@@ -5,8 +5,8 @@
 
 // 기본 더미 계정
 const DUMMY_ACCOUNT = {
-  email: 'demo@astrophysics.hub',
-  password: 'Demo12345',
+  email: 'test@example.hub',
+  password: 'Test1234',
   username: '천체물리 연구자',
   affiliation: 'Astrophysics Research Institute',
 };
