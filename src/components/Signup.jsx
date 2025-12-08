@@ -81,55 +81,61 @@ export default function Signup() {
     setSuccessMessage('');
 
     try {
-      let user = null;
+      let registered = false;
+      let error = null;
 
       // Firebase 시도
       if (authMethod === 'auto' || authMethod === 'firebase') {
         try {
-          user = await gitHubPageSignUp(formData.email, formData.password, {
+          const user = await gitHubPageSignUp(formData.email, formData.password, {
             username: formData.username,
             affiliation: formData.affiliation,
           });
 
           console.log('✓ 회원가입 성공:', user.username);
-          setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
-          
-          setTimeout(() => {
-            navigate('/login');
-          }, 2000);
-          return;
+          registered = true;
         } catch (firebaseErr) {
           console.warn('Firebase 회원가입 실패:', firebaseErr.message);
+          error = firebaseErr.message;
+          
           if (authMethod === 'firebase') {
             setErrors({ submit: firebaseErr.message });
             setLoading(false);
             return;
           }
+          // auto 모드에서는 폴백 계속 진행
         }
       }
 
-      // 로컬 방식 사용 (auto 모드에서 Firebase 실패 시)
-      if (authMethod === 'auto' || authMethod === 'local') {
-        const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
-        const userKey = btoa(formData.email);
+      // 로컬 저장소 시도 (Firebase 실패 시 또는 명시적 선택)
+      if (!registered && (authMethod === 'auto' || authMethod === 'local')) {
+        const users = JSON.parse(localStorage.getItem('firebaseUsers') || '{}');
+        const userHash = btoa(formData.email);
         
-        if (storedUsers[userKey]) {
+        if (users[userHash]) {
           setErrors({ submit: '이미 등록된 이메일입니다.' });
           setLoading(false);
           return;
         }
 
-        storedUsers[userKey] = {
+        const newUser = {
+          uid: 'local-' + Date.now(),
           email: formData.email,
           password: btoa(formData.password),
           username: formData.username,
-          affiliation: formData.affiliation,
-          createdAt: new Date().toISOString(),
+          affiliation: formData.affiliation || '',
+          bio: '',
+          created_at: new Date().toISOString(),
+          isLocal: true,
         };
 
-        localStorage.setItem('registeredUsers', JSON.stringify(storedUsers));
+        users[userHash] = newUser;
+        localStorage.setItem('firebaseUsers', JSON.stringify(users));
         console.log('✓ 로컬 저장소 회원가입 성공');
-        
+        registered = true;
+      }
+
+      if (registered) {
         setSuccessMessage('회원가입이 완료되었습니다. 로그인 페이지로 이동합니다...');
         setTimeout(() => {
           navigate('/login');

@@ -14,6 +14,23 @@ import {
 import { auth } from '../config/firebase';
 
 /**
+ * Firebase 에러 메시지 변환
+ */
+const getFirebaseErrorMessage = (error) => {
+  const errorCode = error.code || error.message;
+  const messages = {
+    'auth/email-already-in-use': '이미 가입된 이메일입니다.',
+    'auth/invalid-email': '올바르지 않은 이메일 형식입니다.',
+    'auth/weak-password': '비밀번호가 너무 약합니다. (최소 6자)',
+    'auth/user-not-found': '등록되지 않은 계정입니다.',
+    'auth/wrong-password': '비밀번호가 잘못되었습니다.',
+    'auth/too-many-requests': '너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.',
+    'auth/network-request-failed': '네트워크 연결을 확인해주세요.',
+  };
+  return messages[errorCode] || error.message || '인증 오류가 발생했습니다.';
+};
+
+/**
  * Firebase 에뮬레이터 연결 (개발 환경)
  */
 export const initFirebaseEmulator = () => {
@@ -31,10 +48,20 @@ export const initFirebaseEmulator = () => {
  */
 export const gitHubPageSignUp = async (email, password, userData) => {
   try {
+    // 로컬스토리지에 이미 있는지 먼저 확인
+    const users = JSON.parse(localStorage.getItem('firebaseUsers') || '{}');
+    const userHash = btoa(email);
+    
+    if (users[userHash]) {
+      throw new Error('이미 가입된 이메일입니다.');
+    }
+
     // 로컬스토리지에 지속성 설정
     await setPersistence(auth, browserLocalPersistence);
 
     let firebaseUser = null;
+    let isLocal = false;
+
     try {
       // Firebase 시도
       const userCredential = await Promise.race([
@@ -45,27 +72,27 @@ export const gitHubPageSignUp = async (email, password, userData) => {
       ]);
       firebaseUser = userCredential.user;
     } catch (fbError) {
-      console.warn('Firebase 회원가입 실패, 로컬 저장으로 진행:', fbError.message);
-      // Firebase 실패 시에도 계속 진행 (로컬 저장)
+      console.warn('Firebase 회원가입 실패:', getFirebaseErrorMessage(fbError));
+      
+      // 특정 에러는 즉시 실패 처리
+      if (fbError.code === 'auth/email-already-in-use') {
+        throw fbError; // Firebase에 이미 가입됨
+      }
+      
+      // 다른 에러는 로컬 저장소로 진행
+      isLocal = true;
     }
 
-    // 로컬스토리지에 백업 저장
-    const users = JSON.parse(localStorage.getItem('firebaseUsers') || '{}');
-    const userHash = btoa(email);
-    
-    if (users[userHash]) {
-      throw new Error('이미 가입된 이메일입니다.');
-    }
-
+    // 로컬스토리지에 저장
     const localUser = {
       uid: firebaseUser?.uid || 'local-' + Date.now(),
       email,
-      password: btoa(password), // 간단한 인코딩 (실제로는 bcrypt 사용)
+      password: btoa(password),
       username: userData.username,
       affiliation: userData.affiliation || '',
       bio: '',
       created_at: new Date().toISOString(),
-      isLocal: !firebaseUser,
+      isLocal: isLocal || !firebaseUser,
     };
 
     users[userHash] = localUser;
@@ -79,7 +106,7 @@ export const gitHubPageSignUp = async (email, password, userData) => {
     };
   } catch (error) {
     console.error('회원가입 오류:', error);
-    throw new Error(error.message || '회원가입 실패');
+    throw new Error(getFirebaseErrorMessage(error));
   }
 };
 
@@ -103,7 +130,7 @@ export const gitHubPageSignIn = async (email, password) => {
       ]);
       firebaseUser = userCredential.user;
     } catch (fbError) {
-      console.warn('Firebase 로그인 실패, 로컬 저장소 확인:', fbError.message);
+      console.warn('Firebase 로그인 실패, 로컬 저장소 확인:', getFirebaseErrorMessage(fbError));
       
       // 로컬스토리지에서 찾기
       const users = JSON.parse(localStorage.getItem('firebaseUsers') || '{}');
@@ -139,7 +166,7 @@ export const gitHubPageSignIn = async (email, password) => {
     };
   } catch (error) {
     console.error('로그인 오류:', error);
-    throw new Error(error.message || '로그인 실패');
+    throw new Error(getFirebaseErrorMessage(error));
   }
 };
 

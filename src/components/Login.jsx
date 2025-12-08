@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { virtualLogin } from '../utils/virtualAuth';
 import { gitHubPageSignIn, saveLoginState } from '../utils/firebaseAuthGitHub';
 
 export default function Login() {
@@ -76,38 +75,44 @@ export default function Login() {
             setLoading(false);
             return;
           }
-          // auto 모드에서 실패 시 virtualAuth 시도
+          // auto 모드에서 실패 시 폴백하지 않음 (Firebase 필수)
         }
       }
 
-      // VirtualAuth 시도 (자동 또는 명시)
-      if (authMethod === 'auto' || authMethod === 'local') {
-        try {
-          user = await virtualLogin(formData.email, formData.password);
-          
-          const userData = {
-            uid: user.uid,
-            email: user.email,
-            username: user.username,
-            role: user.role || 'user',
-            authProvider: 'virtual',
-          };
+      // 로컬 저장소 시도 (명시적으로 선택한 경우만)
+      if (authMethod === 'local') {
+        const users = JSON.parse(localStorage.getItem('firebaseUsers') || '{}');
+        const userHash = btoa(formData.email);
+        
+        if (users[userHash]) {
+          const savedUser = users[userHash];
+          if (btoa(formData.password) === savedUser.password) {
+            const userData = {
+              uid: savedUser.uid,
+              email: savedUser.email,
+              username: savedUser.username,
+              role: 'user',
+              authProvider: 'local-backup',
+            };
 
-          localStorage.setItem('user', JSON.stringify(userData));
-          localStorage.setItem('authToken', user.token);
-          localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('user', JSON.stringify(userData));
+            localStorage.setItem('authToken', userData.uid);
+            localStorage.setItem('isAuthenticated', 'true');
 
-          console.log('✅ 로그인 성공 (Virtual Auth):', userData.username);
-          window.dispatchEvent(new Event('auth-change'));
+            console.log('✅ 로그인 성공 (로컬 저장소):', userData.username);
+            window.dispatchEvent(new Event('auth-change'));
 
-          setTimeout(() => navigate('/'), 500);
-          return;
-        } catch (virtualErr) {
-          console.warn('Virtual auth 실패:', virtualErr.message);
+            setTimeout(() => navigate('/'), 500);
+            return;
+          } else {
+            setError('비밀번호가 잘못되었습니다.');
+            setLoading(false);
+            return;
+          }
         }
       }
 
-      // 모든 방식 실패
+      // 모든 시도 실패
       setError('로그인 실패: 등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
     } catch (err) {
       console.error('로그인 오류:', err);
