@@ -13,7 +13,7 @@ export default function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [authMethod, setAuthMethod] = useState('auto'); // 'auto', 'firebase', 'local'
+  const authMethod = 'auto'; // 자동 모드: Firebase 우선, 실패 시 로컬 저장소
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -156,58 +156,6 @@ export default function Login() {
           >
             천문물리학 연구 플랫폼에 접속하세요
           </motion.p>
-        </div>
-
-        {/* 인증 방식 선택 */}
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
-          <p className="text-xs font-semibold text-blue-900 dark:text-blue-200 mb-3">인증 방식 선택:</p>
-          <div className="space-y-2">
-            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
-              authMethod === 'auto'
-                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
-                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
-            }`}>
-              <input
-                type="radio"
-                name="authMethod"
-                value="auto"
-                checked={authMethod === 'auto'}
-                onChange={(e) => setAuthMethod(e.target.value)}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">자동 (Firebase 우선)</span>
-            </label>
-            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
-              authMethod === 'firebase'
-                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
-                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
-            }`}>
-              <input
-                type="radio"
-                name="authMethod"
-                value="firebase"
-                checked={authMethod === 'firebase'}
-                onChange={(e) => setAuthMethod(e.target.value)}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Firebase 만 사용</span>
-            </label>
-            <label className={`flex items-center p-2 rounded cursor-pointer transition ${
-              authMethod === 'local'
-                ? isDark ? 'bg-blue-800' : 'bg-blue-100'
-                : isDark ? 'hover:bg-blue-900/50' : 'hover:bg-blue-50'
-            }`}>
-              <input
-                type="radio"
-                name="authMethod"
-                value="local"
-                checked={authMethod === 'local'}
-                onChange={(e) => setAuthMethod(e.target.value)}
-                className="mr-2"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">로컬 저장소만 사용</span>
-            </label>
-          </div>
         </div>
 
         {/* 에러 메시지 */}
