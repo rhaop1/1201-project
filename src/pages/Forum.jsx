@@ -1,9 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { forumCategories, forumPosts } from '../data/content';
 
 export default function Forum() {
-  const [posts, setPosts] = useState(forumPosts);
+  const [posts, setPosts] = useState(() => {
+    const saved = localStorage.getItem('forumPosts');
+    return saved ? JSON.parse(saved) : forumPosts;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('forumPosts', JSON.stringify(posts));
+  }, [posts]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [newPost, setNewPost] = useState({ title: '', category: 1, content: '' });
   const [showForm, setShowForm] = useState(false);
