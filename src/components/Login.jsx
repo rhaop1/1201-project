@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { virtualLogin, getDummyAccountInfo } from '../utils/virtualAuth';
+import { virtualLogin } from '../utils/virtualAuth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,7 +13,6 @@ export default function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showDemoInfo, setShowDemoInfo] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -78,8 +77,6 @@ export default function Login() {
     }
   };
 
-  const dummyAccount = getDummyAccountInfo();
-
   return (
     <div className={`min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 transition-colors duration-200 ${
       isDark ? 'bg-gray-900' : 'bg-gray-50'
@@ -115,46 +112,6 @@ export default function Login() {
             천문물리학 연구 플랫폼에 접속하세요
           </motion.p>
         </div>
-
-        {/* 더미 계정 정보 */}
-        {!showDemoInfo && (
-          <motion.button
-            type="button"
-            onClick={() => setShowDemoInfo(true)}
-            className={`w-full text-xs py-2 px-3 rounded border transition-colors duration-200 ${
-              isDark
-                ? 'border-blue-600 text-blue-400 hover:bg-blue-600/10'
-                : 'border-blue-500 text-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            💡 데모 계정 확인
-          </motion.button>
-        )}
-
-        {showDemoInfo && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`p-3 rounded text-sm border-l-4 transition-colors duration-200 ${
-              isDark
-                ? 'bg-blue-900/30 border-blue-600 text-blue-200'
-                : 'bg-blue-50 border-blue-500 text-blue-800'
-            }`}
-          >
-            <div className="font-semibold mb-2">데모 계정으로 시험해보세요:</div>
-            <div className="font-mono text-xs space-y-1">
-              <div>📧 {dummyAccount.email}</div>
-              <div>🔑 {dummyAccount.password}</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowDemoInfo(false)}
-              className="mt-2 text-xs opacity-70 hover:opacity-100"
-            >
-              ✕ 닫기
-            </button>
-          </motion.div>
-        )}
 
         {/* 에러 메시지 */}
         {error && (
