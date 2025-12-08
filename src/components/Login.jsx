@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { firebaseSignIn, getFirebaseUserData } from '../utils/firebaseService';
+import { virtualLogin, getDummyAccountInfo } from '../utils/virtualAuth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ export default function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDemoInfo, setShowDemoInfo] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -42,89 +43,42 @@ export default function Login() {
         return;
       }
 
-      // Firebase 로그인 시도 (타임아웃 설정)
-      let userData = null;
-      let firebaseSuccess = false;
-
+      // virtualAuth를 사용한 로그인 시도
       try {
-        const firebasePromise = firebaseSignIn(formData.email, formData.password);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firebase 타임아웃')), 3000)
-        );
-
-        const user = await Promise.race([firebasePromise, timeoutPromise]);
-        userData = {
+        const user = await virtualLogin(formData.email, formData.password);
+        
+        // 로그인 성공
+        const userData = {
           uid: user.uid,
           email: user.email,
           username: user.username,
           role: user.role || 'user',
-          affiliation: user.affiliation || '',
+          authProvider: 'virtual',
         };
-        firebaseSuccess = true;
-      } catch (firebaseErr) {
-        console.warn('Firebase 로그인 실패 또는 타임아웃:', firebaseErr.message);
-        // Firebase 실패 → 로컬스토리지 폴백
-      }
 
-      // Firebase 실패 시 로컬스토리지 폴백
-      if (!firebaseSuccess) {
-        const storedUsers = JSON.parse(localStorage.getItem('registeredUsers') || '{}');
-        const userKey = btoa(formData.email);
-
-        if (!storedUsers[userKey]) {
-          // 테스트 계정 자동 생성
-          if (formData.email === 'test@example.com' && formData.password === 'Test1234') {
-            userData = {
-              uid: userKey,
-              email: formData.email,
-              username: '테스트 사용자',
-              role: 'user',
-              affiliation: '테스트 계정',
-            };
-          } else {
-            setError('등록되지 않은 계정입니다. 회원가입 후 이용해주세요.');
-            setLoading(false);
-            return;
-          }
-        } else {
-          const storedUser = storedUsers[userKey];
-          // 간단한 비교 (실제로는 bcrypt 사용)
-          if (storedUser.password !== btoa(formData.password)) {
-            setError('비밀번호가 잘못되었습니다.');
-            setLoading(false);
-            return;
-          }
-
-          userData = {
-            uid: userKey,
-            email: formData.email,
-            username: storedUser.username,
-            role: 'user',
-            affiliation: storedUser.affiliation || '',
-          };
-        }
-      }
-
-      // 로컬스토리지에 사용자 정보 저장
-      if (userData) {
         localStorage.setItem('user', JSON.stringify(userData));
-        localStorage.setItem('authToken', userData.uid);
-        console.log('✓ 로그인 성공:', userData.username);
+        localStorage.setItem('authToken', user.token);
+        localStorage.setItem('isAuthenticated', 'true');
 
-        // 이벤트 발생 후 네비게이션
+        console.log('✅ 로그인 성공 (Virtual Auth):', userData.username);
         window.dispatchEvent(new Event('auth-change'));
 
-        setTimeout(() => {
-          navigate('/');
-        }, 100);
+        setTimeout(() => navigate('/'), 500);
+      } catch (virtualErr) {
+        console.error('Virtual auth 실패:', virtualErr);
+        setError('로그인 실패: 등록되지 않은 계정이거나 비밀번호가 잘못되었습니다.');
+        setLoading(false);
       }
     } catch (err) {
       console.error('로그인 오류:', err);
-      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      setError('로그인 중 오류가 발생했습니다.');
+      setLoading(false);
     } finally {
       setLoading(false);
     }
   };
+
+  const dummyAccount = getDummyAccountInfo();
 
   return (
     <div className={`min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8 transition-colors duration-200 ${
@@ -162,12 +116,56 @@ export default function Login() {
           </motion.p>
         </div>
 
+        {/* 더미 계정 정보 */}
+        {!showDemoInfo && (
+          <motion.button
+            type="button"
+            onClick={() => setShowDemoInfo(true)}
+            className={`w-full text-xs py-2 px-3 rounded border transition-colors duration-200 ${
+              isDark
+                ? 'border-blue-600 text-blue-400 hover:bg-blue-600/10'
+                : 'border-blue-500 text-blue-600 hover:bg-blue-50'
+            }`}
+          >
+            💡 데모 계정 확인
+          </motion.button>
+        )}
+
+        {showDemoInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-3 rounded text-sm border-l-4 transition-colors duration-200 ${
+              isDark
+                ? 'bg-blue-900/30 border-blue-600 text-blue-200'
+                : 'bg-blue-50 border-blue-500 text-blue-800'
+            }`}
+          >
+            <div className="font-semibold mb-2">데모 계정으로 시험해보세요:</div>
+            <div className="font-mono text-xs space-y-1">
+              <div>📧 {dummyAccount.email}</div>
+              <div>🔑 {dummyAccount.password}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDemoInfo(false)}
+              className="mt-2 text-xs opacity-70 hover:opacity-100"
+            >
+              ✕ 닫기
+            </button>
+          </motion.div>
+        )}
+
         {/* 에러 메시지 */}
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg dark:bg-red-900 dark:border-red-700 dark:text-red-200"
+            className={`p-3 rounded-lg text-sm border-l-4 transition-colors duration-200 ${
+              isDark
+                ? 'bg-red-900/30 border-red-600 text-red-200'
+                : 'bg-red-50 border-red-500 text-red-800'
+            }`}
           >
             {error}
           </motion.div>
@@ -256,23 +254,6 @@ export default function Login() {
           <Link to="/signup" className="text-blue-600 hover:text-blue-700 font-medium">
             회원가입
           </Link>
-        </motion.div>
-
-        {/* 비밀번호 찾기 */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className={`text-center text-sm transition-colors duration-200 ${
-            isDark ? 'text-gray-400' : 'text-gray-600'
-          }`}
-        >
-          <button 
-            type="button"
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            비밀번호 재설정
-          </button>
         </motion.div>
       </motion.div>
     </div>
