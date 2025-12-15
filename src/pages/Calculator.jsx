@@ -26,7 +26,8 @@ const quickMacros = [
 	{ label: 'sqrt(3)', snippet: 'sqrt(3)' },
 ];
 
-const toolOptions = [
+const calculatorModes = [
+	{ id: 'standard', label: '표준 계산기', description: '실시간 수식 + 히스토리', badge: 'Standard' },
 	{ id: 'roots', label: '근 찾기', description: '다항식 방정식 해석', badge: '고차 방정식' },
 	{ id: 'derivative', label: '미분 엔진', description: '심볼릭/변수 선택', badge: '미분' },
 	{ id: 'integral', label: '적분 엔진', description: 'Simpson Rule', badge: '적분' },
@@ -120,7 +121,7 @@ export default function Calculator() {
 	const [integralBounds, setIntegralBounds] = useState({ from: '0', to: '3.14159' });
 	const [integralResult, setIntegralResult] = useState('');
 	const [integralError, setIntegralError] = useState('');
-	const [activeTool, setActiveTool] = useState('roots');
+	const [activeMode, setActiveMode] = useState('standard');
 
 	const containerClass = isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900';
 	const buttonClass = isDark ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900';
@@ -241,124 +242,14 @@ export default function Calculator() {
 			</motion.div>
 
 			<div className="space-y-6">
-				<motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-					<div className="space-y-6">
-						<div className={`relative overflow-hidden rounded-2xl p-6 ${isDark ? 'bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800' : 'bg-gradient-to-br from-white via-blue-50 to-blue-100 border border-blue-100'}`}>
-							<span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Expression</span>
-							<input
-								className={`w-full bg-transparent text-right text-3xl font-semibold mt-3 focus:outline-none ${isDark ? 'text-white placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-500'}`}
-								value={input}
-								onChange={(e) => setInput(e.target.value)}
-								placeholder="식을 입력하세요 (예: (3+4i)*(2-i) + sin(pi/3))"
-							/>
-							{result && (
-								<p className={`text-right text-lg font-mono mt-2 ${result.startsWith('오류') ? 'text-red-300' : 'text-emerald-300'}`}>
-									= {result}
-								</p>
-							)}
-							<button onClick={handleEvaluate} className={`mt-4 px-4 py-2 rounded-full text-sm font-semibold ${operatorClass}`}>
-								실행 / ENTER
-							</button>
-						</div>
-
-						<div className="space-y-2">
-							<p className={`text-xs font-semibold tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>자주 쓰는 공학 스니펫</p>
-							<div className="flex flex-wrap gap-2">
-								{quickMacros.map((chip) => (
-									<button
-										key={chip.label}
-										onClick={() => appendValue(chip.snippet)}
-										className={`px-3 py-1.5 rounded-full text-xs font-medium border ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
-									>
-										{chip.label}
-									</button>
-								))}
-							</div>
-						</div>
-
-						<div className="grid gap-5 md:grid-cols-2">
-							<div className={`p-4 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
-								<div className="flex items-center justify-between mb-3">
-									<h3 className="text-lg font-semibold">기본 키패드</h3>
-									<span className="text-xs text-blue-500">실수 · 복소 연산</span>
-								</div>
-								<div className="grid grid-cols-4 gap-3">
-									{basicPad.map((row, rowIndex) => (
-										<div className="contents" key={`basic-${rowIndex}`}>
-											{row.map((key) => (
-												<button
-													key={key}
-													onClick={() => appendValue(key === 'pi' ? 'π' : key)}
-													className={`py-3 rounded-xl font-semibold text-lg transition ${['/', '*', '-', '+', '=', 'ANS'].includes(key) ? operatorClass : buttonClass}`}
-												>
-													{key}
-												</button>
-											))}
-										</div>
-									))}
-								</div>
-							</div>
-							<div className={`p-4 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
-								<div className="flex items-center justify-between mb-3">
-									<h3 className="text-lg font-semibold">공학 함수</h3>
-									<span className="text-xs text-blue-500">삼각 · 로그 · 지수</span>
-								</div>
-								<div className="grid grid-cols-5 gap-3">
-									{sciPad.map((row, rowIndex) => (
-										<div className="contents" key={`sci-${rowIndex}`}>
-											{row.map((key) => (
-												<button
-													key={key}
-													onClick={() => appendValue(key === 'pi' ? 'π' : key)}
-													className={`py-3 rounded-xl font-semibold text-sm transition ${operatorClass}`}
-												>
-													{key}
-												</button>
-											))}
-										</div>
-									))}
-								</div>
-								<button onClick={handleEvaluate} className={`w-full mt-3 py-3 rounded-xl font-semibold text-lg ${operatorClass}`}>
-									계산 (=)
-								</button>
-							</div>
-						</div>
-
-						<div className={`p-5 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
-							<div className="flex items-center justify-between mb-2">
-								<p className="font-semibold">최근 10개 계산</p>
-								<button onClick={() => setHistory([])} className={`text-sm ${isDark ? 'text-red-300' : 'text-red-500'}`}>
-									기록 삭제
-								</button>
-							</div>
-							<div className="max-h-64 overflow-y-auto space-y-2">
-								{history.length === 0 && <p className="text-sm text-gray-500">기록 없음</p>}
-								{history.map((entry, idx) => (
-									<button
-										key={`${entry.expression}-${idx}`}
-										onClick={() => {
-											setInput(entry.expression);
-											setResult(entry.result);
-										}}
-										className={`w-full text-left p-3 rounded-xl ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
-									>
-										<p className="text-sm break-words">{entry.expression}</p>
-										<p className="text-sm font-semibold text-green-500">= {entry.result}</p>
-									</button>
-								))}
-							</div>
-						</div>
-					</div>
-				</motion.div>
-
 				<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
 					<div className="flex flex-wrap gap-3">
-						{toolOptions.map((tool) => (
+						{calculatorModes.map((mode) => (
 							<button
-								key={tool.id}
-								onClick={() => setActiveTool(tool.id)}
+								key={mode.id}
+								onClick={() => setActiveMode(mode.id)}
 								className={`flex-1 min-w-[140px] p-4 rounded-2xl border text-left transition ${
-									activeTool === tool.id
+									activeMode === mode.id
 										? isDark
 											? 'bg-blue-900/40 border-blue-500 text-white'
 											: 'bg-blue-50 border-blue-400 text-blue-900'
@@ -367,15 +258,125 @@ export default function Calculator() {
 										: 'bg-white border-gray-200 text-gray-700'
 								}`}
 							>
-								<p className="text-xs uppercase tracking-wide text-blue-400">{tool.badge}</p>
-								<p className="text-lg font-semibold mt-1">{tool.label}</p>
-								<p className="text-sm mt-1 opacity-80">{tool.description}</p>
+								<p className="text-xs uppercase tracking-wide text-blue-400">{mode.badge}</p>
+								<p className="text-lg font-semibold mt-1">{mode.label}</p>
+								<p className="text-sm mt-1 opacity-80">{mode.description}</p>
 							</button>
 						))}
 					</div>
 
-					<div className="mt-6">
-						{activeTool === 'roots' && (
+					<div className="mt-8">
+						{activeMode === 'standard' && (
+							<div className="space-y-6">
+								<div className={`relative overflow-hidden rounded-2xl p-6 ${isDark ? 'bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800' : 'bg-gradient-to-br from-white via-blue-50 to-blue-100 border border-blue-100'}`}>
+									<span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Expression</span>
+									<input
+										className={`w-full bg-transparent text-right text-3xl font-semibold mt-3 focus:outline-none ${isDark ? 'text-white placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-500'}`}
+										value={input}
+										onChange={(e) => setInput(e.target.value)}
+										placeholder="식을 입력하세요 (예: (3+4i)*(2-i) + sin(pi/3))"
+									/>
+									{result && (
+										<p className={`text-right text-lg font-mono mt-2 ${result.startsWith('오류') ? 'text-red-300' : 'text-emerald-300'}`}>
+											= {result}
+										</p>
+									)}
+									<button onClick={handleEvaluate} className={`mt-4 px-4 py-2 rounded-full text-sm font-semibold ${operatorClass}`}>
+										실행 / ENTER
+									</button>
+								</div>
+
+								<div className="space-y-2">
+									<p className={`text-xs font-semibold tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>자주 쓰는 공학 스니펫</p>
+									<div className="flex flex-wrap gap-2">
+										{quickMacros.map((chip) => (
+											<button
+												key={chip.label}
+												onClick={() => appendValue(chip.snippet)}
+												className={`px-3 py-1.5 rounded-full text-xs font-medium border ${isDark ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+											>
+												{chip.label}
+											</button>
+										))}
+									</div>
+								</div>
+
+								<div className="grid gap-5 md:grid-cols-2">
+									<div className={`p-4 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
+										<div className="flex items-center justify-between mb-3">
+											<h3 className="text-lg font-semibold">기본 키패드</h3>
+											<span className="text-xs text-blue-500">실수 · 복소 연산</span>
+										</div>
+										<div className="grid grid-cols-4 gap-3">
+											{basicPad.map((row, rowIndex) => (
+												<div className="contents" key={`basic-${rowIndex}`}>
+													{row.map((key) => (
+														<button
+															key={key}
+															onClick={() => appendValue(key === 'pi' ? 'π' : key)}
+															className={`py-3 rounded-xl font-semibold text-lg transition ${['/', '*', '-', '+', '=', 'ANS'].includes(key) ? operatorClass : buttonClass}`}
+														>
+															{key}
+														</button>
+													))}
+											</div>
+										))}
+									</div>
+								</div>
+								<div className={`p-4 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
+									<div className="flex items-center justify-between mb-3">
+										<h3 className="text-lg font-semibold">공학 함수</h3>
+										<span className="text-xs text-blue-500">삼각 · 로그 · 지수</span>
+									</div>
+									<div className="grid grid-cols-5 gap-3">
+										{sciPad.map((row, rowIndex) => (
+											<div className="contents" key={`sci-${rowIndex}`}>
+												{row.map((key) => (
+													<button
+														key={key}
+														onClick={() => appendValue(key === 'pi' ? 'π' : key)}
+														className={`py-3 rounded-xl font-semibold text-sm transition ${operatorClass}`}
+													>
+														{key}
+													</button>
+												))}
+											</div>
+										))}
+									</div>
+									<button onClick={handleEvaluate} className={`w-full mt-3 py-3 rounded-xl font-semibold text-lg ${operatorClass}`}>
+										계산 (=)
+									</button>
+								</div>
+							</div>
+
+							<div className={`p-5 rounded-2xl border ${isDark ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'}`}>
+								<div className="flex items-center justify-between mb-2">
+									<p className="font-semibold">최근 10개 계산</p>
+									<button onClick={() => setHistory([])} className={`text-sm ${isDark ? 'text-red-300' : 'text-red-500'}`}>
+										기록 삭제
+									</button>
+								</div>
+								<div className="max-h-64 overflow-y-auto space-y-2">
+									{history.length === 0 && <p className="text-sm text-gray-500">기록 없음</p>}
+									{history.map((entry, idx) => (
+										<button
+											key={`${entry.expression}-${idx}`}
+											onClick={() => {
+												setInput(entry.expression);
+												setResult(entry.result);
+											}}
+											className={`w-full text-left p-3 rounded-xl ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+										>
+											<p className="text-sm break-words">{entry.expression}</p>
+											<p className="text-sm font-semibold text-green-500">= {entry.result}</p>
+										</button>
+									))}
+								</div>
+							</div>
+						</div>
+						)}
+
+						{activeMode === 'roots' && (
 							<div>
 								<h2 className="text-xl font-bold mb-4">다항식 근 찾기</h2>
 								<p className={`text-sm mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
@@ -400,7 +401,7 @@ export default function Calculator() {
 							</div>
 						)}
 
-						{activeTool === 'derivative' && (
+						{activeMode === 'derivative' && (
 							<div>
 								<h2 className="text-xl font-bold mb-4">미분 계산</h2>
 								<input
@@ -424,7 +425,7 @@ export default function Calculator() {
 							</div>
 						)}
 
-						{activeTool === 'integral' && (
+						{activeMode === 'integral' && (
 							<div>
 								<h2 className="text-xl font-bold mb-4">수치 적분</h2>
 								<input
@@ -461,7 +462,7 @@ export default function Calculator() {
 							</div>
 						)}
 
-						{activeTool === 'guide' && (
+						{activeMode === 'guide' && (
 							<div>
 								<h2 className="text-xl font-bold mb-3">지원 기능 요약</h2>
 								<ul className={`text-sm space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
