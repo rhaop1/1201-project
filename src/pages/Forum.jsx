@@ -1,41 +1,84 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { forumCategories, forumPosts } from '../data/content';
+import { db } from '../config/firebase';
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'firebase/firestore';
 
 export default function Forum() {
   const [posts, setPosts] = useState(() => {
     const saved = localStorage.getItem('forumPosts');
     return saved ? JSON.parse(saved) : forumPosts;
   });
+  const [firebasePosts, setFirebasePosts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // Firestore에서 게시물 로드
   useEffect(() => {
-    localStorage.setItem('forumPosts', JSON.stringify(posts));
-  }, [posts]);
+    const loadPosts = async () => {
+      try {
+        const q = query(collection(db, 'forumPosts'), orderBy('date', 'desc'));
+        const snapshot = await getDocs(q);
+        const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setFirebasePosts(loaded);
+      } catch (error) {
+        console.log('Firestore 로드 실패, localStorage 사용:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPosts();
+  }, []);
+
+  // localStorage 백업
+  useEffect(() => {
+    if (firebasePosts.length > 0) {
+      localStorage.setItem('forumPosts', JSON.stringify(firebasePosts));
+    }
+  }, [firebasePosts]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [newPost, setNewPost] = useState({ title: '', category: 1, content: '' });
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handlePostSubmit = (e) => {
+  const handlePostSubmit = async (e) => {
     e.preventDefault();
     if (!newPost.title.trim() || !newPost.content.trim()) {
       alert('제목과 내용을 입력해주세요.');
       return;
     }
-    const post = {
-      id: posts.length + 1,
-      ...newPost,
-      author: 'user',
-      date: new Date().toISOString().split('T')[0],
-      replies: 0,
-    };
-    setPosts([post, ...posts]);
-    setNewPost({ title: '', category: 1, content: '' });
-    setShowForm(false);
+    
+    setSubmitting(true);
+    try {
+      // Firestore에 저장
+      const docRef = await addDoc(collection(db, 'forumPosts'), {
+        ...newPost,
+        author: 'user',
+        date: serverTimestamp(),
+        replies: 0,
+      });
+      
+      // 로컬 상태 업데이트
+      const newPostData = {
+        id: docRef.id,
+        ...newPost,
+        author: 'user',
+        date: new Date().toISOString().split('T')[0],
+        replies: 0,
+      };
+      setFirebasePosts([newPostData, ...firebasePosts]);
+      setNewPost({ title: '', category: 1, content: '' });
+      setShowForm(false);
+    } catch (error) {
+      console.error('게시물 저장 실패:', error);
+      alert('게시물 저장에 실패했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const filteredPosts = selectedCategory
-    ? posts.filter((p) => p.category === selectedCategory)
-    : posts;
+    ? firebasePosts.filter((p) => p.category === selectedCategory)
+    : firebasePosts;
 
   return (
     <div className="space-y-8 sm:space-y-12">
@@ -93,9 +136,10 @@ export default function Forum() {
           </div>
           <button
             type="submit"
-            className="w-full bg-green-600 dark:bg-green-600 hover:bg-green-700 dark:hover:bg-green-700 text-white px-6 py-2 rounded font-bold transition text-sm sm:text-base"
+            disabled={submitting}
+            className="w-full bg-green-600 dark:bg-green-600 hover:bg-green-700 dark:hover:bg-green-700 disabled:bg-gray-500 text-white px-6 py-2 rounded font-bold transition text-sm sm:text-base"
           >
-            게시
+            {submitting ? '저장 중...' : '게시'}
           </button>
         </form>
       )}

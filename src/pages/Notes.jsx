@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import { db } from '../config/firebase';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 export default function Notes() {
   const { isDark } = useTheme();
@@ -12,23 +14,32 @@ export default function Notes() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editTags, setEditTags] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // 로컬스토리지에서 노트 로드
+  // Firestore에서 노트 로드
   useEffect(() => {
-    const savedNotes = localStorage.getItem('notes');
-    if (savedNotes) {
+    const loadNotes = async () => {
       try {
-        setNotes(JSON.parse(savedNotes));
-      } catch (e) {
-        console.error('노트 로드 실패:', e);
+        const snapshot = await getDocs(collection(db, 'notes'));
+        const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setNotes(loaded);
+        localStorage.setItem('notes', JSON.stringify(loaded)); // 백업
+      } catch (error) {
+        console.log('Firestore 로드 실패, localStorage 사용:', error);
+        const savedNotes = localStorage.getItem('notes');
+        if (savedNotes) {
+          try {
+            setNotes(JSON.parse(savedNotes));
+          } catch (e) {
+            console.error('노트 로드 실패:', e);
+          }
+        }
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    loadNotes();
   }, []);
-
-  // 로컬스토리지에 노트 저장
-  const saveToLocalStorage = (updatedNotes) => {
-    localStorage.setItem('notes', JSON.stringify(updatedNotes));
-  };
 
   // 새 노트 생성
   const handleNewNote = () => {
@@ -49,52 +60,79 @@ export default function Notes() {
   };
 
   // 노트 저장
-  const handleSaveNote = () => {
+  const handleSaveNote = async () => {
     if (!editTitle.trim()) {
       alert('제목을 입력해주세요.');
       return;
     }
 
-    if (newNote) {
-      const newNoteObj = {
-        id: Date.now(),
-        title: editTitle,
-        content: editContent,
-        tags: editTags.split(',').map(t => t.trim()).filter(t => t),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const updatedNotes = [newNoteObj, ...notes];
-      setNotes(updatedNotes);
-      saveToLocalStorage(updatedNotes);
-      setNewNote(false);
-      setSelectedNote(newNoteObj.id);
-    } else if (selectedNote) {
-      const updatedNotes = notes.map(note =>
-        note.id === selectedNote
-          ? {
-              ...note,
-              title: editTitle,
-              content: editContent,
-              tags: editTags.split(',').map(t => t.trim()).filter(t => t),
-              updatedAt: new Date().toISOString(),
-            }
-          : note
-      );
-      setNotes(updatedNotes);
-      saveToLocalStorage(updatedNotes);
+    try {
+      if (newNote) {
+        // 새 노트 생성
+        const docRef = await addDoc(collection(db, 'notes'), {
+          title: editTitle,
+          content: editContent,
+          tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        const newNoteObj = {
+          id: docRef.id,
+          title: editTitle,
+          content: editContent,
+          tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const updatedNotes = [newNoteObj, ...notes];
+        setNotes(updatedNotes);
+        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+        setNewNote(false);
+        setSelectedNote(newNoteObj.id);
+      } else if (selectedNote) {
+        // 기존 노트 업데이트
+        const noteRef = doc(db, 'notes', selectedNote);
+        await updateDoc(noteRef, {
+          title: editTitle,
+          content: editContent,
+          tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          updatedAt: serverTimestamp(),
+        });
+        const updatedNotes = notes.map(note =>
+          note.id === selectedNote
+            ? {
+                ...note,
+                title: editTitle,
+                content: editContent,
+                tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+                updatedAt: new Date().toISOString(),
+              }
+            : note
+        );
+        setNotes(updatedNotes);
+        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+      }
+    } catch (error) {
+      console.error('노트 저장 실패:', error);
+      alert('노트 저장에 실패했습니다.');
     }
   };
 
   // 노트 삭제
-  const handleDeleteNote = (id) => {
+  const handleDeleteNote = async (id) => {
     if (confirm('이 노트를 삭제하시겠습니까?')) {
-      const updatedNotes = notes.filter(note => note.id !== id);
-      setNotes(updatedNotes);
-      saveToLocalStorage(updatedNotes);
-      if (selectedNote === id) {
-        setSelectedNote(null);
-        setNewNote(false);
+      try {
+        await deleteDoc(doc(db, 'notes', id));
+        const updatedNotes = notes.filter(note => note.id !== id);
+        setNotes(updatedNotes);
+        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+        if (selectedNote === id) {
+          setSelectedNote(null);
+          setNewNote(false);
+        }
+      } catch (error) {
+        console.error('노트 삭제 실패:', error);
+        alert('노트 삭제에 실패했습니다.');
       }
     }
   };

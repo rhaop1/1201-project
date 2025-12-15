@@ -2,29 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../utils/auth';
+import { db } from '../config/firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
   const user = getCurrentUser();
 
-  const [formData, setFormData] = useState(() => {
-    const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    return {
-      username: savedUser.username || user?.username || '',
-      email: savedUser.email || user?.email || '',
-      affiliation: savedUser.affiliation || user?.affiliation || '',
-      bio: savedUser.bio || user?.bio || '',
-    };
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    affiliation: '',
+    bio: '',
   });
 
+  // Firestore에서 프로필 로드
   useEffect(() => {
-    const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    setFormData({
-      username: savedUser.username || user?.username || '',
-      email: savedUser.email || user?.email || '',
-      affiliation: savedUser.affiliation || user?.affiliation || '',
-      bio: savedUser.bio || user?.bio || '',
-    });
+    const loadProfile = async () => {
+      try {
+        if (user?.uid) {
+          const profileRef = doc(db, 'profiles', user.uid);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            setFormData(profileSnap.data());
+            localStorage.setItem('user', JSON.stringify(profileSnap.data())); // 백업
+          } else {
+            const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            setFormData({
+              username: savedUser.username || user?.username || '',
+              email: savedUser.email || user?.email || '',
+              affiliation: savedUser.affiliation || user?.affiliation || '',
+              bio: savedUser.bio || user?.bio || '',
+            });
+          }
+        }
+      } catch (error) {
+        console.log('프로필 로드 실패, localStorage 사용:', error);
+        const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        setFormData({
+          username: savedUser.username || user?.username || '',
+          email: savedUser.email || user?.email || '',
+          affiliation: savedUser.affiliation || user?.affiliation || '',
+          bio: savedUser.bio || user?.bio || '',
+        });
+      }
+    };
+    loadProfile();
   }, [user]);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -45,27 +68,30 @@ export default function Profile() {
     setMessage('');
 
     try {
-      // 로컬스토리지에 업데이트된 사용자 정보 저장
-      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const updatedUser = {
-        ...currentUser,
-        username: formData.username,
-        affiliation: formData.affiliation,
-        bio: formData.bio,
-      };
-      
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      
-      // UI 업데이트
-      setMessage('프로필이 업데이트되었습니다.');
-      setIsEditing(false);
-      
-      // 2초 후 메시지 제거
-      setTimeout(() => setMessage(''), 2000);
-      
-      // 다른 탭/창에 알림
-      window.dispatchEvent(new Event('profile-updated'));
+      if (user?.uid) {
+        // Firestore에 저장
+        const profileRef = doc(db, 'profiles', user.uid);
+        await setDoc(profileRef, {
+          ...formData,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        
+        // localStorage 백업
+        localStorage.setItem('user', JSON.stringify(formData));
+        
+        setMessage('프로필이 업데이트되었습니다.');
+        setIsEditing(false);
+        setTimeout(() => setMessage(''), 2000);
+        window.dispatchEvent(new Event('profile-updated'));
+      } else {
+        // 로그인 안 된 경우 localStorage만 사용
+        localStorage.setItem('user', JSON.stringify(formData));
+        setMessage('프로필이 업데이트되었습니다.');
+        setIsEditing(false);
+        setTimeout(() => setMessage(''), 2000);
+      }
     } catch (err) {
+      console.error('프로필 업데이트 실패:', err);
       setMessage('프로필 업데이트 실패: ' + err.message);
     } finally {
       setLoading(false);
