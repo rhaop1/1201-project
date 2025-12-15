@@ -1,33 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { getCurrentUser } from '../utils/auth';
+import { db } from '../config/firebase';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 
 export default function Bookmarks() {
   const { isDark } = useTheme();
+  const user = getCurrentUser();
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!user?.email) {
+      setLoading(false);
+      return;
+    }
     fetchBookmarks();
-  }, []);
+  }, [user?.email]);
 
   const fetchBookmarks = async () => {
     try {
-      const response = await fetch('/api/users/bookmarks', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('북마크를 불러올 수 없습니다.');
-      }
-
-      const data = await response.json();
-      setBookmarks(data.bookmarks || []);
+      const q = query(collection(db, 'bookmarks'), where('userEmail', '==', user.email));
+      const snapshot = await getDocs(q);
+      const bookmarksList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBookmarks(bookmarksList);
+      console.log('✅ 북마크 로드:', user.email, '개수:', bookmarksList.length);
     } catch (err) {
-      setError(err.message);
+      console.error('❌ 북마크 로드 실패:', err);
+      setError('북마크를 불러올 수 없습니다.');
     } finally {
       setLoading(false);
     }
@@ -35,18 +37,10 @@ export default function Bookmarks() {
 
   const handleRemoveBookmark = async (bookmarkId) => {
     try {
-      const response = await fetch(`/api/users/bookmarks/${bookmarkId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('북마크 삭제 실패');
-      }
-
+      const bookmarkRef = doc(db, 'bookmarks', bookmarkId);
+      await deleteDoc(bookmarkRef);
       setBookmarks(prev => prev.filter(b => b.id !== bookmarkId));
+      console.log('✅ 북마크 삭제:', bookmarkId);
     } catch (err) {
       setError(err.message);
     }

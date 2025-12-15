@@ -22,23 +22,23 @@ export default function Profile() {
 
   // Firestore에서 프로필 로드 - 한 번만
   useEffect(() => {
-    if (!user?.username) {
+    if (!user?.email) {
       setLoading(false);
       return;
     }
 
     const loadFromFirestore = async () => {
       try {
-        const profileRef = doc(db, 'profiles', user.username);
+        const profileRef = doc(db, 'profiles', user.email);
         const snapshot = await getDoc(profileRef);
         
         if (snapshot.exists()) {
           setFormData(snapshot.data());
-          console.log('✅ Firestore에서 프로필 로드:', user.username);
+          console.log('✅ Firestore에서 프로필 로드:', user.email);
         } else {
           setFormData({
             username: user.username,
-            email: user.email || '',
+            email: user.email,
             affiliation: '',
             bio: '',
           });
@@ -58,7 +58,7 @@ export default function Profile() {
     };
 
     loadFromFirestore();
-  }, [user?.username]);
+  }, [user?.email]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -73,8 +73,8 @@ export default function Profile() {
     setLoading(true);
 
     try {
-      // Firestore에 저장
-      await setDoc(doc(db, 'profiles', user.username), {
+      // Firestore에 이메일로 저장
+      await setDoc(doc(db, 'profiles', user.email), {
         username: formData.username,
         email: formData.email,
         affiliation: formData.affiliation,
@@ -82,7 +82,7 @@ export default function Profile() {
         updatedAt: serverTimestamp(),
       });
 
-      console.log('✅ Firestore에 저장됨:', user.username);
+      console.log('✅ Firestore에 저장됨:', user.email);
       setMessage('✅ 프로필이 저장되었습니다.');
       setIsEditing(false);
 

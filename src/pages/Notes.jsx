@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import { getCurrentUser } from '../utils/auth';
 import { db } from '../config/firebase';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from 'firebase/firestore';
 
 export default function Notes() {
   const { isDark } = useTheme();
   const navigate = useNavigate();
+  const user = getCurrentUser();
+  
   const [notes, setNotes] = useState([]);
   const [selectedNote, setSelectedNote] = useState(null);
   const [newNote, setNewNote] = useState(false);
@@ -16,30 +19,28 @@ export default function Notes() {
   const [editTags, setEditTags] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Firestore에서 노트 로드
+  // Firestore에서 현재 사용자의 노트만 로드
   useEffect(() => {
+    if (!user?.email) {
+      setLoading(false);
+      return;
+    }
+
     const loadNotes = async () => {
       try {
-        const snapshot = await getDocs(collection(db, 'notes'));
+        const q = query(collection(db, 'notes'), where('userEmail', '==', user.email));
+        const snapshot = await getDocs(q);
         const loaded = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setNotes(loaded);
-        localStorage.setItem('notes', JSON.stringify(loaded)); // 백업
+        console.log('✅ 사용자 노트 로드:', user.email, '개수:', loaded.length);
       } catch (error) {
-        console.log('Firestore 로드 실패, localStorage 사용:', error);
-        const savedNotes = localStorage.getItem('notes');
-        if (savedNotes) {
-          try {
-            setNotes(JSON.parse(savedNotes));
-          } catch (e) {
-            console.error('노트 로드 실패:', e);
-          }
-        }
+        console.log('❌ Firestore 로드 실패:', error);
       } finally {
         setLoading(false);
       }
     };
     loadNotes();
-  }, []);
+  }, [user?.email]);
 
   // 새 노트 생성
   const handleNewNote = () => {
@@ -68,11 +69,12 @@ export default function Notes() {
 
     try {
       if (newNote) {
-        // 새 노트 생성
+        // 새 노트 생성 - 사용자 이메일과 함께 저장
         const docRef = await addDoc(collection(db, 'notes'), {
           title: editTitle,
           content: editContent,
           tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          userEmail: user.email,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -81,14 +83,15 @@ export default function Notes() {
           title: editTitle,
           content: editContent,
           tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          userEmail: user.email,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         const updatedNotes = [newNoteObj, ...notes];
         setNotes(updatedNotes);
-        localStorage.setItem('notes', JSON.stringify(updatedNotes));
         setNewNote(false);
         setSelectedNote(newNoteObj.id);
+        console.log('✅ 노트 저장:', user.email, editTitle);
       } else if (selectedNote) {
         // 기존 노트 업데이트
         const noteRef = doc(db, 'notes', selectedNote);
@@ -96,6 +99,7 @@ export default function Notes() {
           title: editTitle,
           content: editContent,
           tags: editTags.split(',').map(t => t.trim()).filter(t => t),
+          userEmail: user.email,
           updatedAt: serverTimestamp(),
         });
         const updatedNotes = notes.map(note =>
