@@ -16,7 +16,7 @@ export async function extractTextFromPDF(file) {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     
     let fullText = '';
-    const pageCount = Math.min(pdf.numPages, 10);
+    const pageCount = Math.min(pdf.numPages, 15);
     
     console.log(`PDF 페이지 수: ${pdf.numPages}, 추출할 페이지: ${pageCount}`);
     
