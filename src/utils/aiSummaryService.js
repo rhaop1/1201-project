@@ -1,8 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js 워커 설정
-const workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+// PDF.js 워커 설정 - 로컬 public 폴더에서 로드
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/1201-project/pdf.worker.min.js';
 
 // Hugging Face 무료 API (환경변수에서 로드)
 const HF_API_KEY = import.meta.env.VITE_HF_API_KEY || '';
