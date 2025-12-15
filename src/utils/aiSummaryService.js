@@ -1,7 +1,10 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js 워커 설정
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// PDF.js 워커 설정 - 로컬 node_modules에서 로드
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.js',
+  import.meta.url,
+).href;
 
 // Hugging Face 무료 API (환경변수에서 로드)
 const HF_API_KEY = import.meta.env.VITE_HF_API_KEY || '';
@@ -18,15 +21,30 @@ export async function extractTextFromPDF(file) {
       try {
         const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
         let fullText = '';
+        const pageCount = Math.min(pdf.numPages, 10); // 최대 10페이지까지 추출
         
-        for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) { // 처음 5페이지만 추출
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
-          fullText += pageText + '\n';
+        for (let i = 1; i <= pageCount; i++) {
+          try {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items
+              .map(item => (typeof item === 'object' && item.str ? item.str : ''))
+              .join(' ');
+            
+            if (pageText.trim()) {
+              fullText += pageText + '\n';
+            }
+          } catch (pageError) {
+            console.warn(`페이지 ${i} 추출 실패:`, pageError);
+            continue;
+          }
         }
         
-        resolve(fullText);
+        if (!fullText.trim()) {
+          reject(new Error('PDF에서 텍스트를 추출할 수 없습니다.'));
+        } else {
+          resolve(fullText);
+        }
       } catch (error) {
         reject(new Error('PDF 텍스트 추출 실패: ' + error.message));
       }
