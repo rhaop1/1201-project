@@ -26,6 +26,13 @@ const quickMacros = [
 	{ label: 'sqrt(3)', snippet: 'sqrt(3)' },
 ];
 
+const toolOptions = [
+	{ id: 'roots', label: '근 찾기', description: '다항식 방정식 해석', badge: '고차 방정식' },
+	{ id: 'derivative', label: '미분 엔진', description: '심볼릭/변수 선택', badge: '미분' },
+	{ id: 'integral', label: '적분 엔진', description: 'Simpson Rule', badge: '적분' },
+	{ id: 'guide', label: '지원 기능', description: '사용 가이드 & 상수', badge: '가이드' },
+];
+
 const evaluatePolynomial = (coeffs, value) => {
 	return coeffs.reduce((acc, coeff) => math.add(math.multiply(acc, value), coeff));
 };
@@ -113,6 +120,7 @@ export default function Calculator() {
 	const [integralBounds, setIntegralBounds] = useState({ from: '0', to: '3.14159' });
 	const [integralResult, setIntegralResult] = useState('');
 	const [integralError, setIntegralError] = useState('');
+	const [activeTool, setActiveTool] = useState('roots');
 
 	const containerClass = isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900';
 	const buttonClass = isDark ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900';
@@ -232,8 +240,8 @@ export default function Calculator() {
 				</div>
 			</motion.div>
 
-			<div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-				<motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`xl:col-span-2 p-6 rounded-3xl border shadow-sm ${containerClass}`}>
+			<div className="space-y-6">
+				<motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
 					<div className="space-y-6">
 						<div className={`relative overflow-hidden rounded-2xl p-6 ${isDark ? 'bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800' : 'bg-gradient-to-br from-white via-blue-50 to-blue-100 border border-blue-100'}`}>
 							<span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300">Expression</span>
@@ -343,96 +351,128 @@ export default function Calculator() {
 					</div>
 				</motion.div>
 
-				<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="space-y-6">
-					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
-						<h2 className="text-xl font-bold mb-4">다항식 근 찾기</h2>
-						<p className={`text-sm mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-							최고차항부터 계수 입력 (예: x² - 3x + 2 → <span className="font-mono">1,-3,2</span>)
-						</p>
-						<input
-							value={polyInput}
-							onChange={(e) => setPolyInput(e.target.value)}
-							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-						/>
-						<button onClick={handlePolynomialSolve} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
-							근 계산하기
-						</button>
-						{polyError && <p className="text-sm text-red-400 mt-3">{polyError}</p>}
-						{polyOutput.length > 0 && (
-							<ul className="mt-4 space-y-1 text-sm font-mono">
-								{polyOutput.map((root, idx) => (
-									<li key={idx}>x{idx + 1} = {root}</li>
-								))}
-							</ul>
-						)}
-					</div>
-
-					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
-						<h2 className="text-xl font-bold mb-4">미분 계산</h2>
-						<input
-							value={derivativeExpression}
-							onChange={(e) => setDerivativeExpression(e.target.value)}
-							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-							placeholder="f(x) = "
-						/>
-						<div className="flex items-center gap-3 mb-3">
-							<label className="text-sm">변수</label>
-							<input
-								value={derivativeVariable}
-								onChange={(e) => setDerivativeVariable(e.target.value)}
-								className={`w-16 text-center px-2 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-							/>
-							<button onClick={handleDerivative} className={`flex-1 py-2 rounded-xl font-semibold ${operatorClass}`}>
-								d/d{derivativeVariable}
+				<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
+					<div className="flex flex-wrap gap-3">
+						{toolOptions.map((tool) => (
+							<button
+								key={tool.id}
+								onClick={() => setActiveTool(tool.id)}
+								className={`flex-1 min-w-[140px] p-4 rounded-2xl border text-left transition ${
+									activeTool === tool.id
+										? isDark
+											? 'bg-blue-900/40 border-blue-500 text-white'
+											: 'bg-blue-50 border-blue-400 text-blue-900'
+										: isDark
+										? 'bg-gray-800 border-gray-700 text-gray-200'
+										: 'bg-white border-gray-200 text-gray-700'
+								}`}
+							>
+								<p className="text-xs uppercase tracking-wide text-blue-400">{tool.badge}</p>
+								<p className="text-lg font-semibold mt-1">{tool.label}</p>
+								<p className="text-sm mt-1 opacity-80">{tool.description}</p>
 							</button>
-						</div>
-						{derivativeResult && <p className="text-sm font-mono text-green-400">{derivativeResult}</p>}
+						))}
 					</div>
 
-					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
-						<h2 className="text-xl font-bold mb-4">수치 적분</h2>
-						<input
-							value={integralExpression}
-							onChange={(e) => setIntegralExpression(e.target.value)}
-							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-							placeholder="f(x)"
-						/>
-						<div className="flex items-center gap-3 mb-3">
-							<label className="text-sm">변수</label>
-							<input
-								value={integralVariable}
-								onChange={(e) => setIntegralVariable(e.target.value)}
-								className={`w-20 text-center px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-							/>
-							<input
-								value={integralBounds.from}
-								onChange={(e) => setIntegralBounds((prev) => ({ ...prev, from: e.target.value }))}
-								className={`flex-1 px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-								placeholder="하한"
-							/>
-							<input
-								value={integralBounds.to}
-								onChange={(e) => setIntegralBounds((prev) => ({ ...prev, to: e.target.value }))}
-								className={`flex-1 px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
-								placeholder="상한"
-							/>
-						</div>
-						<button onClick={handleIntegral} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
-							∫ 계산하기
-						</button>
-						{integralError && <p className="text-sm text-red-400 mt-3">{integralError}</p>}
-						{integralResult && <p className="text-sm font-mono text-green-400 mt-3">{integralResult}</p>}
-					</div>
+					<div className="mt-6">
+						{activeTool === 'roots' && (
+							<div>
+								<h2 className="text-xl font-bold mb-4">다항식 근 찾기</h2>
+								<p className={`text-sm mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+									최고차항부터 계수 입력 (예: x² - 3x + 2 → <span className="font-mono">1,-3,2</span>)
+								</p>
+								<input
+									value={polyInput}
+									onChange={(e) => setPolyInput(e.target.value)}
+									className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+								/>
+								<button onClick={handlePolynomialSolve} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
+									근 계산하기
+								</button>
+								{polyError && <p className="text-sm text-red-400 mt-3">{polyError}</p>}
+								{polyOutput.length > 0 && (
+									<ul className="mt-4 space-y-1 text-sm font-mono">
+										{polyOutput.map((root, idx) => (
+											<li key={idx}>x{idx + 1} = {root}</li>
+										))}
+									</ul>
+								)}
+							</div>
+						)}
 
-					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
-						<h2 className="text-xl font-bold mb-3">지원 기능 요약</h2>
-						<ul className={`text-sm space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-							<li>• 복소수 연산 (예: (3+4i)*(2-i))</li>
-							<li>• 다항식 근 (최대 10차, Durand-Kerner 방식)</li>
-							<li>• 심볼릭 미분 (math.js 엔진)</li>
-							<li>• 수치 적분 (Simpson rule)</li>
-							<li>• 내장 상수 및 함수: π, e, i, trig/log, pow</li>
-						</ul>
+						{activeTool === 'derivative' && (
+							<div>
+								<h2 className="text-xl font-bold mb-4">미분 계산</h2>
+								<input
+									value={derivativeExpression}
+									onChange={(e) => setDerivativeExpression(e.target.value)}
+									className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+									placeholder="f(x) = "
+								/>
+								<div className="flex flex-wrap items-center gap-3 mb-3">
+									<label className="text-sm">변수</label>
+									<input
+										value={derivativeVariable}
+										onChange={(e) => setDerivativeVariable(e.target.value)}
+										className={`w-20 text-center px-2 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+									/>
+									<button onClick={handleDerivative} className={`flex-1 min-w-[140px] py-2 rounded-xl font-semibold ${operatorClass}`}>
+										d/d{derivativeVariable}
+									</button>
+								</div>
+								{derivativeResult && <p className="text-sm font-mono text-green-400">{derivativeResult}</p>}
+							</div>
+						)}
+
+						{activeTool === 'integral' && (
+							<div>
+								<h2 className="text-xl font-bold mb-4">수치 적분</h2>
+								<input
+									value={integralExpression}
+									onChange={(e) => setIntegralExpression(e.target.value)}
+									className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+									placeholder="f(x)"
+								/>
+								<div className="flex flex-wrap items-center gap-3 mb-3">
+									<label className="text-sm">변수</label>
+									<input
+										value={integralVariable}
+										onChange={(e) => setIntegralVariable(e.target.value)}
+										className={`w-24 text-center px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+									/>
+									<input
+										value={integralBounds.from}
+										onChange={(e) => setIntegralBounds((prev) => ({ ...prev, from: e.target.value }))}
+										className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+										placeholder="하한"
+									/>
+									<input
+										value={integralBounds.to}
+										onChange={(e) => setIntegralBounds((prev) => ({ ...prev, to: e.target.value }))}
+										className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+										placeholder="상한"
+									/>
+								</div>
+								<button onClick={handleIntegral} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
+									∫ 계산하기
+								</button>
+								{integralError && <p className="text-sm text-red-400 mt-3">{integralError}</p>}
+								{integralResult && <p className="text-sm font-mono text-green-400 mt-3">{integralResult}</p>}
+							</div>
+						)}
+
+						{activeTool === 'guide' && (
+							<div>
+								<h2 className="text-xl font-bold mb-3">지원 기능 요약</h2>
+								<ul className={`text-sm space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+									<li>• 복소수 연산 (예: (3+4i)*(2-i))</li>
+									<li>• 다항식 근 (최대 10차, Durand-Kerner 방식)</li>
+									<li>• 심볼릭 미분 (math.js 엔진)</li>
+									<li>• 수치 적분 (Simpson rule)</li>
+									<li>• 내장 상수 및 함수: π, e, i, trig/log, pow</li>
+								</ul>
+							</div>
+						)}
 					</div>
 				</motion.div>
 			</div>
