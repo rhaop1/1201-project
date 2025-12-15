@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { getCurrentUser } from '../utils/auth';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
   const user = getCurrentUser();
+  const [authUser, setAuthUser] = useState(null);
 
   const [formData, setFormData] = useState({
     username: '',
@@ -16,25 +17,34 @@ export default function Profile() {
     bio: '',
   });
 
+  // Firebase 인증 사용자 확인
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+      setAuthUser(firebaseUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Firestore에서 프로필 로드
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        if (user?.uid) {
-          const profileRef = doc(db, 'profiles', user.uid);
-          const profileSnap = await getDoc(profileRef);
-          if (profileSnap.exists()) {
-            setFormData(profileSnap.data());
-            localStorage.setItem('user', JSON.stringify(profileSnap.data())); // 백업
-          } else {
-            const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-            setFormData({
-              username: savedUser.username || user?.username || '',
-              email: savedUser.email || user?.email || '',
-              affiliation: savedUser.affiliation || user?.affiliation || '',
-              bio: savedUser.bio || user?.bio || '',
-            });
-          }
+        // Firebase UID 또는 localStorage 사용자명으로 저장
+        const userId = authUser?.uid || user?.username || 'anonymous';
+        const profileRef = doc(db, 'profiles', userId);
+        const profileSnap = await getDoc(profileRef);
+        
+        if (profileSnap.exists()) {
+          setFormData(profileSnap.data());
+          localStorage.setItem('user', JSON.stringify(profileSnap.data()));
+        } else {
+          const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+          setFormData({
+            username: savedUser.username || user?.username || '',
+            email: savedUser.email || user?.email || '',
+            affiliation: savedUser.affiliation || user?.affiliation || '',
+            bio: savedUser.bio || user?.bio || '',
+          });
         }
       } catch (error) {
         console.log('프로필 로드 실패, localStorage 사용:', error);
@@ -47,8 +57,11 @@ export default function Profile() {
         });
       }
     };
-    loadProfile();
-  }, [user]);
+    
+    if (authUser || user) {
+      loadProfile();
+    }
+  }, [authUser, user]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -68,28 +81,22 @@ export default function Profile() {
     setMessage('');
 
     try {
-      if (user?.uid) {
-        // Firestore에 저장
-        const profileRef = doc(db, 'profiles', user.uid);
-        await setDoc(profileRef, {
-          ...formData,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-        
-        // localStorage 백업
-        localStorage.setItem('user', JSON.stringify(formData));
-        
-        setMessage('프로필이 업데이트되었습니다.');
-        setIsEditing(false);
-        setTimeout(() => setMessage(''), 2000);
-        window.dispatchEvent(new Event('profile-updated'));
-      } else {
-        // 로그인 안 된 경우 localStorage만 사용
-        localStorage.setItem('user', JSON.stringify(formData));
-        setMessage('프로필이 업데이트되었습니다.');
-        setIsEditing(false);
-        setTimeout(() => setMessage(''), 2000);
-      }
+      // Firebase UID 또는 사용자명으로 저장
+      const userId = authUser?.uid || user?.username || 'anonymous';
+      const profileRef = doc(db, 'profiles', userId);
+      
+      await setDoc(profileRef, {
+        ...formData,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      
+      // localStorage 백업
+      localStorage.setItem('user', JSON.stringify(formData));
+      
+      setMessage('프로필이 업데이트되었습니다.');
+      setIsEditing(false);
+      setTimeout(() => setMessage(''), 2000);
+      window.dispatchEvent(new Event('profile-updated'));
     } catch (err) {
       console.error('프로필 업데이트 실패:', err);
       setMessage('프로필 업데이트 실패: ' + err.message);
