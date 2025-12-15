@@ -18,6 +18,7 @@ export default function Notes() {
   const [editContent, setEditContent] = useState('');
   const [editTags, setEditTags] = useState('');
   const [loading, setLoading] = useState(true);
+  const [saveMessage, setSaveMessage] = useState(''); // 저장 알림 상태
 
   // Firestore에서 현재 사용자의 노트만 로드
   useEffect(() => {
@@ -91,6 +92,9 @@ export default function Notes() {
         setNotes(updatedNotes);
         setNewNote(false);
         setSelectedNote(newNoteObj.id);
+        // 저장 완료 알림
+        setSaveMessage('✅ 노트가 저장되었습니다!');
+        setTimeout(() => setSaveMessage(''), 2000);
         console.log('✅ 노트 저장:', user.email, editTitle);
       } else if (selectedNote) {
         // 기존 노트 업데이트
@@ -114,11 +118,14 @@ export default function Notes() {
             : note
         );
         setNotes(updatedNotes);
-        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+        // 저장 완료 알림
+        setSaveMessage('✅ 노트가 수정되었습니다!');
+        setTimeout(() => setSaveMessage(''), 2000);
       }
     } catch (error) {
       console.error('노트 저장 실패:', error);
-      alert('노트 저장에 실패했습니다.');
+      setSaveMessage('❌ 저장에 실패했습니다.');
+      setTimeout(() => setSaveMessage(''), 2000);
     }
   };
 
@@ -153,6 +160,22 @@ export default function Notes() {
 
   return (
     <div className="min-h-screen space-y-8">
+      {/* 저장 알림 메시지 */}
+      {saveMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className={`fixed top-20 right-4 px-6 py-3 rounded-lg shadow-lg font-semibold text-white z-50 ${
+            saveMessage.includes('❌') 
+              ? 'bg-red-600' 
+              : 'bg-green-600'
+          }`}
+        >
+          {saveMessage}
+        </motion.div>
+      )}
+
       {/* 헤더 */}
       <motion.div
         initial={{ opacity: 0, y: -30 }}

@@ -10,98 +10,156 @@ export default function Visualizations() {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState('cmb');
 
-  // CMB 파워 스펙트럼 데이터
+  // CMB 파워 스펙트럼 데이터 (확대됨)
   const cmbData = [
+    { l: 2, Cl: 1200 },
     { l: 10, Cl: 2400 },
+    { l: 20, Cl: 3200 },
+    { l: 30, Cl: 3800 },
     { l: 50, Cl: 5000 },
+    { l: 75, Cl: 5300 },
     { l: 100, Cl: 5500 },
+    { l: 120, Cl: 5400 },
     { l: 150, Cl: 5200 },
+    { l: 180, Cl: 5100 },
     { l: 200, Cl: 4800 },
+    { l: 250, Cl: 4200 },
     { l: 300, Cl: 3500 },
+    { l: 400, Cl: 3100 },
     { l: 500, Cl: 2800 },
+    { l: 650, Cl: 2400 },
     { l: 800, Cl: 2200 },
     { l: 1000, Cl: 1800 },
+    { l: 1250, Cl: 1400 },
     { l: 1500, Cl: 1200 },
+    { l: 1800, Cl: 900 },
     { l: 2000, Cl: 800 },
     { l: 2500, Cl: 500 },
   ];
 
-  // 회전 곡선 데이터
+  // 회전 곡선 데이터 (확대됨)
   const rotationCurveData = [
+    { r: 0.5, v_obs: 60, v_disk: 60, v_dm: 0 },
     { r: 1, v_obs: 100, v_disk: 100, v_dm: 0 },
+    { r: 1.5, v_obs: 120, v_disk: 115, v_dm: 20 },
     { r: 2, v_obs: 140, v_disk: 130, v_dm: 40 },
+    { r: 2.5, v_obs: 150, v_disk: 138, v_dm: 60 },
     { r: 3, v_obs: 160, v_disk: 145, v_dm: 80 },
+    { r: 3.5, v_obs: 165, v_disk: 150, v_dm: 100 },
     { r: 4, v_obs: 170, v_disk: 155, v_dm: 110 },
+    { r: 4.5, v_obs: 172, v_disk: 157, v_dm: 120 },
     { r: 5, v_obs: 175, v_disk: 160, v_dm: 130 },
     { r: 6, v_obs: 178, v_disk: 162, v_dm: 145 },
+    { r: 7, v_obs: 179, v_disk: 163, v_dm: 155 },
     { r: 8, v_obs: 180, v_disk: 165, v_dm: 160 },
     { r: 10, v_obs: 180, v_disk: 166, v_dm: 170 },
+    { r: 12, v_obs: 180, v_disk: 166.5, v_dm: 175 },
     { r: 15, v_obs: 180, v_disk: 168, v_dm: 175 },
+    { r: 18, v_obs: 179.5, v_disk: 168.5, v_dm: 176 },
     { r: 20, v_obs: 180, v_disk: 169, v_dm: 178 },
   ];
 
-  // HR 다이어그램 데이터
+  // HR 다이어그램 데이터 (확대됨)
   const hrData = [
+    // 주계열성 (Main Sequence)
+    { temp: 2500, mag: 16, type: 'Main Sequence' },
     { temp: 3000, mag: 15, type: 'Main Sequence' },
+    { temp: 3500, mag: 12, type: 'Main Sequence' },
     { temp: 4000, mag: 10, type: 'Main Sequence' },
+    { temp: 5000, mag: 6, type: 'Main Sequence' },
     { temp: 5500, mag: 4.8, type: 'Main Sequence' },
+    { temp: 6000, mag: 3.5, type: 'Main Sequence' },
     { temp: 6500, mag: 3, type: 'Main Sequence' },
+    { temp: 7500, mag: 1.8, type: 'Main Sequence' },
     { temp: 8000, mag: 1.5, type: 'Main Sequence' },
+    { temp: 9000, mag: 0.5, type: 'Main Sequence' },
     { temp: 10000, mag: -1, type: 'Main Sequence' },
-    { temp: 3500, mag: -2, type: 'Giants' },
+    // 거성 (Giants)
+    { temp: 3000, mag: -2, type: 'Giants' },
+    { temp: 3500, mag: -2.5, type: 'Giants' },
+    { temp: 4000, mag: -2.8, type: 'Giants' },
     { temp: 4500, mag: -3, type: 'Giants' },
+    { temp: 5000, mag: -3.2, type: 'Giants' },
     { temp: 5500, mag: -4, type: 'Giants' },
+    // 초거성 (Supergiants)
     { temp: 3000, mag: -6, type: 'Supergiants' },
+    { temp: 3500, mag: -6.5, type: 'Supergiants' },
     { temp: 4000, mag: -7, type: 'Supergiants' },
-    { temp: 20000, mag: 8, type: 'White Dwarfs' },
-    { temp: 15000, mag: 10, type: 'White Dwarfs' },
+    { temp: 4500, mag: -7.3, type: 'Supergiants' },
+    // 백색왜성 (White Dwarfs)
+    { temp: 7000, mag: 11, type: 'White Dwarfs' },
     { temp: 8000, mag: 12, type: 'White Dwarfs' },
+    { temp: 10000, mag: 10, type: 'White Dwarfs' },
+    { temp: 15000, mag: 10, type: 'White Dwarfs' },
+    { temp: 20000, mag: 8, type: 'White Dwarfs' },
   ];
 
-  // 중력파 파형 (시각화 스케일: 10^-21 단위로 표시)
+  // 중력파 파형 (시각화 스케일: 10^-21 단위로 표시) - 확대됨
   const gwWaveformData = [
-    { t: 0, h: 0.5 },
+    { t: 0, h: 0.2 },
+    { t: 0.05, h: 0.8 },
     { t: 0.1, h: 1.5 },
+    { t: 0.15, h: 2.0 },
     { t: 0.2, h: 2.5 },
+    { t: 0.25, h: 3.2 },
     { t: 0.3, h: 4.0 },
+    { t: 0.35, h: 5.2 },
     { t: 0.4, h: 6.5 },
+    { t: 0.45, h: 8.2 },
     { t: 0.5, h: 10 },
+    { t: 0.55, h: 12.5 },
     { t: 0.6, h: 15 },
+    { t: 0.65, h: 18.5 },
     { t: 0.7, h: 22 },
+    { t: 0.75, h: 26 },
     { t: 0.8, h: 32 },
+    { t: 0.85, h: 38 },
     { t: 0.9, h: 45 },
+    { t: 0.95, h: 48 },
     { t: 1.0, h: 50 },
   ];
 
-  // 태외행성 통과 광도
-  const exoplanetTransitData = Array.from({ length: 40 }, (_, i) => {
-    const phase = ((i - 20) / 20);
+  // 태외행성 통과 광도 - 더 정밀함
+  const exoplanetTransitData = Array.from({ length: 100 }, (_, i) => {
+    const phase = ((i - 50) / 50);
     const transitDepth = 0.01;
-    const flux = 1.0 - (transitDepth * Math.max(0, 1 - Math.abs(phase) * 1.5));
-    return { phase: (phase).toFixed(2), flux: parseFloat(flux.toFixed(5)) };
+    const transitWidth = 1.5;
+    const flux = 1.0 - (transitDepth * Math.max(0, 1 - Math.abs(phase) * transitWidth));
+    return { phase: (phase).toFixed(3), flux: parseFloat(flux.toFixed(6)) };
   });
 
-  // Type Ia 초신성 광곡선
+  // Type Ia 초신성 광곡선 - 확대됨
   const sn1aLightCurveData = [
+    { day: -15, mag: 22 },
     { day: -10, mag: 20 },
     { day: -5, mag: 18 },
+    { day: -2, mag: -18.5 },
     { day: 0, mag: -19.3 },
+    { day: 2, mag: -19.1 },
     { day: 5, mag: -18.5 },
+    { day: 8, mag: -18 },
     { day: 10, mag: -17.8 },
     { day: 15, mag: -16.5 },
     { day: 20, mag: -15.2 },
+    { day: 25, mag: -13.5 },
     { day: 30, mag: -12 },
     { day: 40, mag: -8 },
     { day: 50, mag: -4 },
+    { day: 60, mag: -1 },
   ];
 
-  // WIMP 검출 한계 (시각화 스케일: 로그 스케일)
+  // WIMP 검출 한계 (시각화 스케일: 로그 스케일) - 확대됨
   const wimpDetectionData = [
+    { mass: 5, currentLimit: 50, futureLimit: 0.05 },
     { mass: 10, currentLimit: 100, futureLimit: 0.1 },
+    { mass: 20, currentLimit: 120, futureLimit: 0.11 },
     { mass: 50, currentLimit: 150, futureLimit: 0.12 },
+    { mass: 75, currentLimit: 140, futureLimit: 0.11 },
     { mass: 100, currentLimit: 10, futureLimit: 0.01 },
+    { mass: 200, currentLimit: 15, futureLimit: 0.012 },
     { mass: 500, currentLimit: 20, futureLimit: 0.015 },
     { mass: 1000, currentLimit: 1, futureLimit: 0.001 },
+    { mass: 2000, currentLimit: 0.5, futureLimit: 0.0005 },
   ];
 
   const colors = {

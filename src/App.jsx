@@ -13,7 +13,6 @@ import Profile from './pages/Profile';
 import Bookmarks from './pages/Bookmarks';
 import Notes from './pages/Notes';
 import Visualizations from './pages/Visualizations';
-import Calculator from './pages/Calculator';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -34,7 +33,6 @@ export default function App() {
             <Route path="/concepts/:slug" element={<ConceptDetail />} />
             <Route path="/papers" element={<PaperSummary />} />
             <Route path="/visualizations" element={<Visualizations />} />
-            <Route path="/calculator" element={<Calculator />} />
             
             {/* 보호된 라우트 */}
             <Route 
