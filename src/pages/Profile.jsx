@@ -17,13 +17,14 @@ export default function Profile() {
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   // Firestore에서 프로필 로드 - 한 번만
   useEffect(() => {
     if (!user?.email) {
-      setLoading(false);
+      setLoadingProfile(false);
       return;
     }
 
@@ -31,17 +32,18 @@ export default function Profile() {
       try {
         const profileRef = doc(db, 'profiles', user.email);
         const snapshot = await getDoc(profileRef);
-        
+        const defaults = {
+          username: user.username || '',
+          email: user.email,
+          affiliation: '',
+          bio: '',
+        };
+
         if (snapshot.exists()) {
-          setFormData(snapshot.data());
+          setFormData({ ...defaults, ...snapshot.data() });
           console.log('✅ Firestore에서 프로필 로드:', user.email);
         } else {
-          setFormData({
-            username: user.username,
-            email: user.email,
-            affiliation: '',
-            bio: '',
-          });
+          setFormData(defaults);
           console.log('📝 새 프로필 (Firestore에 없음)');
         }
       } catch (err) {
@@ -53,12 +55,12 @@ export default function Profile() {
           bio: '',
         });
       } finally {
-        setLoading(false);
+        setLoadingProfile(false);
       }
     };
 
     loadFromFirestore();
-  }, [user?.email]);
+  }, [user?.email, user?.username]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -70,7 +72,7 @@ export default function Profile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
 
     try {
       // Firestore에 이메일로 저장
@@ -91,7 +93,7 @@ export default function Profile() {
       console.error('❌ 저장 실패:', err.code, err.message);
       setMessage('❌ 저장 실패: ' + err.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -99,6 +101,14 @@ export default function Profile() {
     return (
       <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
         로그인 후 이용 가능합니다.
+      </div>
+    );
+  }
+
+  if (loadingProfile) {
+    return (
+      <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+        프로필 정보를 불러오는 중입니다...
       </div>
     );
   }
@@ -221,14 +231,14 @@ export default function Profile() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={saving}
               className={`w-full py-2 px-4 rounded-lg font-medium text-white transition ${
-                loading
+                saving
                   ? 'bg-blue-400 cursor-not-allowed opacity-50'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
-              {loading ? '저장 중...' : '저장'}
+              {saving ? '저장 중...' : '저장'}
             </button>
           </form>
         ) : (

@@ -50,6 +50,7 @@ export default function Header() {
     { to: '/concepts', label: '개념' },
     { to: '/papers', label: '논문 요약' },
     { to: '/visualizations', label: '시각화' },
+    { to: '/calculator', label: '계산기' },
     { to: '/forum', label: '게시판' },
     { to: '/glossary', label: '용어 사전' },
     { to: '/references', label: '참고 자료' },

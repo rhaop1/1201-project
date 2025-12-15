@@ -1,34 +1,138 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import { forumPosts, forumCategories } from '../data/content';
+import { forumCategories } from '../data/content';
+import { db } from '../config/firebase';
+import {
+  doc,
+  getDoc,
+  collection,
+  addDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  increment,
+} from 'firebase/firestore';
+import { getCurrentUser } from '../utils/auth';
 
 export default function ForumPostDetail() {
   const { postId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isDark } = useTheme();
-  const [replies, setReplies] = useState([
-    {
-      id: 1,
-      author: '연구자1',
-      content: '좋은 질문입니다. 관련 논문을 참고하시면 도움이 될 것 같습니다.',
-      date: '2025-12-04',
-      likes: 3,
-    },
-    {
-      id: 2,
-      author: '연구자2',
-      content: '저도 비슷한 의문을 가지고 있었습니다. 함께 토론해봅시다.',
-      date: '2025-12-05',
-      likes: 1,
-    },
-  ]);
+  const currentUser = getCurrentUser();
+  const [post, setPost] = useState(location.state?.post || null);
+  const [loading, setLoading] = useState(!location.state?.post);
+  const [replies, setReplies] = useState([]);
   const [newReply, setNewReply] = useState('');
+  const [replyError, setReplyError] = useState('');
 
-  // 게시물 찾기
-  const post = forumPosts.find((p) => p.id === parseInt(postId));
-  const category = forumCategories.find((c) => c.id === post?.category);
+  const toDisplayDate = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (value.toDate) return value.toDate().toLocaleDateString('ko-KR');
+    if (value instanceof Date) return value.toLocaleDateString('ko-KR');
+    return new Date(value).toLocaleDateString('ko-KR');
+  };
+
+  const fetchPost = useCallback(async () => {
+    setLoading(true);
+    try {
+      const postRef = doc(db, 'forumPosts', postId);
+      const snapshot = await getDoc(postRef);
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setPost({
+          id: snapshot.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt || new Date(),
+        });
+      } else {
+        setPost(null);
+      }
+    } catch (error) {
+      console.error('게시물 로드 실패:', error);
+      setPost(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [postId]);
+
+  const fetchReplies = useCallback(async () => {
+    try {
+      const repliesRef = collection(db, 'forumPosts', postId, 'replies');
+      const q = query(repliesRef, orderBy('createdAt', 'asc'));
+      const snapshot = await getDocs(q);
+      const loaded = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt || new Date(),
+        };
+      });
+      setReplies(loaded);
+    } catch (error) {
+      console.error('댓글 로드 실패:', error);
+    }
+  }, [postId]);
+
+  useEffect(() => {
+    if (!location.state?.post) {
+      fetchPost();
+    }
+  }, [fetchPost, location.state?.post]);
+
+  useEffect(() => {
+    fetchReplies();
+  }, [fetchReplies]);
+
+  const handleReplySubmit = async (e) => {
+    e.preventDefault();
+    setReplyError('');
+    if (!newReply.trim()) {
+      setReplyError('댓글을 입력해주세요.');
+      return;
+    }
+
+    try {
+      const repliesRef = collection(db, 'forumPosts', postId, 'replies');
+      const authorName = currentUser?.username || currentUser?.email || '익명 연구자';
+      const payload = {
+        author: authorName,
+        authorEmail: currentUser?.email || null,
+        content: newReply.trim(),
+        likes: 0,
+        createdAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(repliesRef, payload);
+      const optimisticReply = {
+        id: docRef.id,
+        ...payload,
+        createdAt: new Date(),
+      };
+      setReplies((prev) => [...prev, optimisticReply]);
+      setNewReply('');
+
+      const postRef = doc(db, 'forumPosts', postId);
+      await updateDoc(postRef, { replies: increment(1), updatedAt: serverTimestamp() });
+      setPost((prev) => (prev ? { ...prev, replies: (prev.replies || 0) + 1 } : prev));
+    } catch (error) {
+      console.error('댓글 저장 실패:', error);
+      setReplyError('댓글 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={`text-center py-12 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+        게시물을 불러오는 중입니다...
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -43,24 +147,7 @@ export default function ForumPostDetail() {
     );
   }
 
-  const handleReplySubmit = (e) => {
-    e.preventDefault();
-    if (!newReply.trim()) {
-      alert('댓글을 입력해주세요.');
-      return;
-    }
-
-    const reply = {
-      id: replies.length + 1,
-      author: '현재 사용자',
-      content: newReply,
-      date: new Date().toISOString().split('T')[0],
-      likes: 0,
-    };
-
-    setReplies([...replies, reply]);
-    setNewReply('');
-  };
+  const category = forumCategories.find((c) => c.id === post?.category);
 
   return (
     <div className="space-y-8">
@@ -114,10 +201,10 @@ export default function ForumPostDetail() {
               <span className="font-medium">작성자:</span> {post.author}
             </div>
             <div>
-              <span className="font-medium">날짜:</span> {post.date}
+              <span className="font-medium">날짜:</span> {toDisplayDate(post.createdAt)}
             </div>
             <div>
-              <span className="font-medium">댓글:</span> {post.replies}개
+              <span className="font-medium">댓글:</span> {post.replies || replies.length}개
             </div>
             <div>
               <span className="font-medium">조회:</span> {post.views || 0}회
@@ -159,6 +246,7 @@ export default function ForumPostDetail() {
                 : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
             }`}
           />
+          {replyError && <p className="text-sm text-red-400">{replyError}</p>}
           <button
             type="submit"
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
@@ -195,7 +283,7 @@ export default function ForumPostDetail() {
             } text-sm`}>
               <div>
                 <span className="font-medium">{reply.author}</span>
-                <span className="ml-4">{reply.date}</span>
+                <span className="ml-4">{toDisplayDate(reply.createdAt)}</span>
               </div>
               <button
                 className={`transition ${

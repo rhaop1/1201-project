@@ -1,533 +1,413 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import * as math from 'mathjs';
+
+const basicPad = [
+	['7', '8', '9', '/'],
+	['4', '5', '6', '*'],
+	['1', '2', '3', '-'],
+	['0', '.', '=', '+'],
+	['(', ')', 'ANS', 'DEL'],
+];
+
+const sciPad = [
+	['sin(', 'cos(', 'tan(', 'asin(', 'acos('],
+	['log(', 'ln(', 'exp(', 'sqrt(', '^'],
+	['pi', 'e', 'i', 'abs(', 'pow('],
+];
+
+const evaluatePolynomial = (coeffs, value) => {
+	return coeffs.reduce((acc, coeff) => math.add(math.multiply(acc, value), coeff));
+};
+
+const formatComplex = (complexValue) => {
+	if (typeof complexValue === 'number') {
+		return complexValue.toFixed(6).replace(/\.0+$/, '');
+	}
+	const real = complexValue.re || 0;
+	const imag = complexValue.im || 0;
+	const realStr = Math.abs(real) < 1e-9 ? '0' : real.toFixed(6).replace(/\.0+$/, '');
+	const imagStr = Math.abs(imag) < 1e-9 ? '0' : imag.toFixed(6).replace(/\.0+$/, '');
+	if (Math.abs(imag) < 1e-9) {
+		return realStr;
+	}
+	const sign = imag >= 0 ? '+' : '-';
+	return `${realStr} ${sign} ${Math.abs(imagStr)}i`;
+};
+
+const findPolynomialRoots = (coefficients) => {
+	const normalized = coefficients.map((value) => math.complex(value, 0));
+	const leading = normalized[0];
+	if (math.equal(leading, 0)) {
+		throw new Error('최고차항의 계수는 0이 될 수 없습니다.');
+	}
+	const monic = normalized.map((value) => math.divide(value, leading));
+	const degree = monic.length - 1;
+	const radius = 1 + Math.max(...monic.slice(1).map((c) => math.abs(c)));
+	const roots = Array.from({ length: degree }, (_, idx) => math.complex({ r: radius, phi: (2 * Math.PI * idx) / degree }));
+
+	for (let iter = 0; iter < 80; iter++) {
+		let maxDelta = 0;
+		for (let i = 0; i < roots.length; i++) {
+			let numerator = evaluatePolynomial(monic, roots[i]);
+			let denominator = math.complex(1, 0);
+			for (let j = 0; j < roots.length; j++) {
+				if (i !== j) {
+					denominator = math.multiply(denominator, math.subtract(roots[i], roots[j]));
+				}
+			}
+			const delta = math.divide(numerator, denominator);
+			roots[i] = math.subtract(roots[i], delta);
+			maxDelta = Math.max(maxDelta, math.abs(delta));
+		}
+		if (maxDelta < 1e-9) break;
+	}
+
+	return roots;
+};
+
+const integrateNumerically = (expression, variable, lower, upper, steps = 600) => {
+	if (steps % 2 !== 0) steps += 1;
+	const scope = {};
+	const h = (upper - lower) / steps;
+	let sum = 0;
+
+	for (let i = 0; i <= steps; i++) {
+		const x = lower + i * h;
+		scope[variable] = x;
+		const fx = math.evaluate(expression, scope);
+		if (i === 0 || i === steps) {
+			sum += fx;
+		} else if (i % 2 === 0) {
+			sum += 2 * fx;
+		} else {
+			sum += 4 * fx;
+		}
+	}
+	return (h / 3) * sum;
+};
 
 export default function Calculator() {
-  const { isDark } = useTheme();
-  const [activeCalc, setActiveCalc] = useState('schwarzschild');
-  
-  // 계산기 상태
-  const [schInput, setSchInput] = useState({ mass: 10 });
-  const [iscoInput, setIscoInput] = useState({ mass: 10, spin: 0.5 });
-  const [luminosityInput, setLuminosityInput] = useState({ mass: 1, age: 10 });
-  const [lumDistInput, setLumDistInput] = useState({ redshift: 1.0, magnitude: 20 });
-  const [cmbInput, setCmbInput] = useState({ redshift: 1000 });
+	const { isDark } = useTheme();
+	const [input, setInput] = useState('');
+	const [result, setResult] = useState('');
+	const [history, setHistory] = useState([]);
+	const [activePad, setActivePad] = useState('basic');
+	const [polyInput, setPolyInput] = useState('1,-3,2');
+	const [polyOutput, setPolyOutput] = useState([]);
+	const [polyError, setPolyError] = useState('');
+	const [derivativeExpression, setDerivativeExpression] = useState('x^3 + 2*x');
+	const [derivativeVariable, setDerivativeVariable] = useState('x');
+	const [derivativeResult, setDerivativeResult] = useState('');
+	const [integralExpression, setIntegralExpression] = useState('sin(x)');
+	const [integralVariable, setIntegralVariable] = useState('x');
+	const [integralBounds, setIntegralBounds] = useState({ from: '0', to: '3.14159' });
+	const [integralResult, setIntegralResult] = useState('');
+	const [integralError, setIntegralError] = useState('');
 
-  // Schwarzschild 반지름 계산 (질량 단위: 태양질량)
-  const calcSchwarzschild = () => {
-    const M_sun_kg = 1.989e30; // kg
-    const G = 6.674e-11; // m^3/(kg*s^2)
-    const c = 3e8; // m/s
-    const M = schInput.mass * M_sun_kg;
-    const rs = (2 * G * M) / (c * c);
-    return rs / 1000; // km로 변환
-  };
+	const containerClass = isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900';
+	const buttonClass = isDark ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900';
+	const operatorClass = isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white';
 
-  // ISCO 궤도 (Kerr 블랙홀)
-  const calcISCO = () => {
-    const M_sun_km = 1.477; // 태양질량을 km로 표현
-    const M = iscoInput.mass * M_sun_km;
-    const a = iscoInput.spin; // 회전 매개변수 (a* = a*c²/GM)
-    
-    const Z1 = 1 + Math.cbrt(1 - a*a) * (Math.cbrt(1 + a) - Math.cbrt(1 - a));
-    const Z2 = Math.sqrt(3 * a * a + Z1 * Z1);
-    const r_isco = M * (3 + Z2 - Math.sqrt((3 - Z1) * (3 + Z1 + 2 * Z2)));
-    return r_isco;
-  };
+	const appendValue = (value) => {
+		if (value === 'DEL') {
+			setInput((prev) => prev.slice(0, -1));
+			return;
+		}
+		if (value === '=') {
+			handleEvaluate();
+			return;
+		}
+		if (value === 'ANS') {
+			if (history.length > 0) {
+				setInput((prev) => prev + history[history.length - 1].result);
+			}
+			return;
+		}
+		setInput((prev) => prev + value);
+	};
 
-  // 별의 주계열 수명 추정 (M/L 비율)
-  const calcLifetime = () => {
-    const M = luminosityInput.mass;
-    const L = Math.pow(M, 3.5); // 질량-광도 관계
-    const M_sun_L_sun = 1 / 1; // 태양 1배 질량 = 1배 광도
-    const lifetime = (M / L) * 10; // Gyr 단위 (태양은 ~10 Gyr)
-    return lifetime;
-  };
+	const handleEvaluate = () => {
+		if (!input.trim()) return;
+		try {
+			const expression = input.replace(/π/g, 'pi').replace(/√/g, 'sqrt');
+			let calcResult = math.evaluate(expression);
+			if (typeof calcResult === 'number') {
+				calcResult = calcResult.toPrecision(10).replace(/\.0+$/, '');
+			} else if (math.typeOf(calcResult) === 'Complex') {
+				calcResult = formatComplex(calcResult);
+			}
+			setResult(String(calcResult));
+			setHistory((prev) => [...prev.slice(-9), { expression: input, result: String(calcResult) }]);
+		} catch (err) {
+			setResult(`오류: ${err.message}`);
+		}
+	};
 
-  // 광도 거리 계산 (ΛCDM)
-  const calcLuminosityDistance = () => {
-    const z = lumDistInput.redshift;
-    const H0 = 67.4; // km/s/Mpc
-    const c = 300000; // km/s
-    const OmegaM = 0.315;
-    const OmegaL = 0.685;
-    
-    // 공움직임 거리 근사 (간단한 수치 통합)
-    let comoving_distance = 0;
-    const dz = z / 1000;
-    for (let i = 0; i < 1000; i++) {
-      const z_i = i * dz;
-      const E_z = Math.sqrt(OmegaM * (1 + z_i)**3 + OmegaL);
-      comoving_distance += c / (H0 * E_z) * dz;
-    }
-    
-    const lum_dist = (1 + z) * comoving_distance;
-    return lum_dist;
-  };
+	const handlePolynomialSolve = () => {
+		setPolyError('');
+		try {
+			const coefficients = polyInput
+				.split(',')
+				.map((value) => value.trim())
+				.filter((value) => value.length > 0)
+				.map((value) => Number(value));
 
-  // 적색편이로부터 CMB 온도 계산
-  const calcCMBTemperature = () => {
-    const z = cmbInput.redshift;
-    const T0 = 2.725; // 현재 CMB 온도 (K)
-    return T0 * (1 + z);
-  };
+			if (coefficients.length < 2) {
+				throw new Error('최소 2개의 계수가 필요합니다. (예: 1,-3,2)');
+			}
+			if (coefficients.some((value) => Number.isNaN(value))) {
+				throw new Error('모든 계수는 숫자여야 합니다.');
+			}
 
-  const containerClass = isDark 
-    ? 'bg-gray-800 border-gray-700' 
-    : 'bg-white border-gray-200';
+			const roots = findPolynomialRoots(coefficients);
+			setPolyOutput(roots.map((root) => formatComplex(root)));
+		} catch (error) {
+			setPolyError(error.message);
+			setPolyOutput([]);
+		}
+	};
 
-  const inputClass = isDark
-    ? 'bg-gray-700 border-gray-600 text-white'
-    : 'bg-white border-gray-300';
+	const handleDerivative = () => {
+		try {
+			const derivative = math.derivative(derivativeExpression, derivativeVariable).toString();
+			setDerivativeResult(`d/d${derivativeVariable} = ${derivative}`);
+		} catch (error) {
+			setDerivativeResult(`미분 오류: ${error.message}`);
+		}
+	};
 
-  const labelClass = isDark ? 'text-gray-300' : 'text-gray-700';
+	const handleIntegral = () => {
+		setIntegralError('');
+		try {
+			const lower = Number(integralBounds.from);
+			const upper = Number(integralBounds.to);
+			if (Number.isNaN(lower) || Number.isNaN(upper)) {
+				throw new Error('구간은 숫자여야 합니다.');
+			}
+			if (lower === upper) {
+				throw new Error('구간 길이가 0입니다.');
+			}
+			const value = integrateNumerically(integralExpression, integralVariable, lower, upper);
+			setIntegralResult(`∫ ${integralExpression} d${integralVariable} = ${Number(value).toPrecision(8)}`);
+		} catch (error) {
+			setIntegralError(error.message);
+			setIntegralResult('');
+		}
+	};
 
-  return (
-    <div className="space-y-12">
-      {/* 헤더 */}
-      <motion.div
-        initial={{ opacity: 0, y: -30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
-          천체물리 계산기
-        </h1>
-        <p className={`text-sm sm:text-base ${
-          isDark ? 'text-gray-300' : 'text-gray-600'
-        }`}>
-          블랙홀, 항성, 우주론적 매개변수의 빠른 계산
-        </p>
-      </motion.div>
+	return (
+		<div className="space-y-8">
+			<motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+				<h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-500 to-blue-500 dark:from-indigo-300 dark:to-blue-300 bg-clip-text text-transparent">
+					공학 계산 스튜디오
+				</h1>
+				<p className={`text-sm sm:text-base ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+					실시간 수식 계산, 다항식 근 찾기, 미분/적분 등 공학 용도의 풀스택 계산 도구입니다.
+				</p>
+			</motion.div>
 
-      {/* 탭 네비게이션 */}
-      <div className="flex flex-wrap gap-2 sm:gap-4">
-        {[
-          { id: 'schwarzschild', label: 'Schwarzschild 반지름', icon: '⚫' },
-          { id: 'isco', label: 'ISCO 궤도', icon: '🔄' },
-          { id: 'lifetime', label: '별의 수명', icon: '⭐' },
-          { id: 'lumdist', label: '광도 거리', icon: '📏' },
-          { id: 'cmb', label: 'CMB 온도', icon: '🌡️' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveCalc(tab.id)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              activeCalc === tab.id
-                ? isDark
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-blue-600 text-white'
-                : isDark
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            <span className="mr-1">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+			<div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+				<motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`xl:col-span-2 p-6 rounded-2xl border shadow-sm ${containerClass}`}>
+					<div className="flex flex-wrap gap-2 mb-4 border-b border-gray-300 dark:border-gray-700 pb-3">
+						{[
+							{ id: 'basic', label: '기본 키패드' },
+							{ id: 'scientific', label: '공학 함수' },
+							{ id: 'history', label: '히스토리' },
+						].map((tab) => (
+							<button
+								key={tab.id}
+								onClick={() => setActivePad(tab.id)}
+								className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+									activePad === tab.id
+										? isDark
+											? 'bg-blue-500/20 text-blue-300'
+											: 'bg-blue-100 text-blue-600'
+										: isDark
+										? 'text-gray-400 hover:text-white'
+										: 'text-gray-500 hover:text-gray-900'
+								}`}
+							>
+								{tab.label}
+							</button>
+						))}
+					</div>
 
-      {/* Schwarzschild 반지름 */}
-      {activeCalc === 'schwarzschild' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className={`p-6 rounded-lg border ${containerClass}`}
-        >
-          <h2 className="text-2xl font-bold mb-4">Schwarzschild 반지름</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 입력 */}
-            <div className="space-y-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  블랙홀 질량 (태양질량 M☉)
-                </label>
-                <input
-                  type="number"
-                  value={schInput.mass}
-                  onChange={(e) => setSchInput({ mass: parseFloat(e.target.value) || 0 })}
-                  min="0.1"
-                  max="1e10"
-                  step="1"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  태양: 1, 지구 질량 블랙홀: 3×10⁻⁶, Sgr A*: 4×10⁶
-                </p>
-              </div>
+					<div className={`rounded-xl p-4 mb-4 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+						<input
+							className={`w-full bg-transparent text-right text-3xl font-semibold mb-3 focus:outline-none ${isDark ? 'text-white' : 'text-gray-900'}`}
+							value={input}
+							onChange={(e) => setInput(e.target.value)}
+							placeholder="식을 입력하세요 (예: (3+4i)*(2-i) + sin(pi/3))"
+						/>
+						{result && (
+							<p className={`text-right text-lg font-mono ${result.startsWith('오류') ? 'text-red-400' : 'text-green-500'}`}>
+								= {result}
+							</p>
+						)}
+					</div>
 
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  공식
-                </label>
-                <div className={`p-3 rounded text-sm font-mono ${
-                  isDark ? 'bg-gray-700' : 'bg-gray-100'
-                }`}>
-                  r_s = 2GM/c² = 2.95 km × (M/M☉)
-                </div>
-              </div>
+					{activePad === 'basic' && (
+						<div className="grid grid-cols-4 gap-3">
+							{basicPad.map((row, rowIndex) => (
+								<div className="contents" key={`basic-${rowIndex}`}>
+									{row.map((key) => (
+										<button
+											key={key}
+											onClick={() => appendValue(key === 'pi' ? 'π' : key)}
+											className={`py-3 rounded-xl font-semibold text-lg transition ${['/', '*', '-', '+', '=', 'ANS'].includes(key) ? operatorClass : buttonClass}`}
+										>
+											{key}
+										</button>
+									))}
+								</div>
+							))}
+						</div>
+					)}
 
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  물리적 의미
-                </label>
-                <ul className={`text-xs space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• 블랙홀의 사건지평선 반지름</li>
-                  <li>• 광자도 탈출 불가능한 경계</li>
-                  <li>• 모든 질량은 이 반지름 내에 압축</li>
-                </ul>
-              </div>
-            </div>
+					{activePad === 'scientific' && (
+						<div className="grid grid-cols-5 gap-3">
+							{sciPad.map((row, rowIndex) => (
+								<div className="contents" key={`sci-${rowIndex}`}>
+									{row.map((key) => (
+										<button
+											key={key}
+											onClick={() => appendValue(key === 'pi' ? 'π' : key)}
+											className={`py-3 rounded-xl font-semibold text-sm transition ${operatorClass}`}
+										>
+											{key}
+										</button>
+									))}
+								</div>
+							))}
+							<button onClick={handleEvaluate} className={`col-span-5 py-3 rounded-xl font-semibold text-lg ${operatorClass}`}>
+								계산 (=)
+							</button>
+						</div>
+					)}
 
-            {/* 결과 */}
-            <div className="space-y-4">
-              <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                <p className={`text-sm font-semibold mb-2 ${
-                  isDark ? 'text-gray-300' : 'text-gray-600'
-                }`}>
-                  Schwarzschild 반지름
-                </p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {calcSchwarzschild().toFixed(2)} km
-                </div>
-                <p className={`text-xs mt-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  = {(calcSchwarzschild() / 6.371).toFixed(1)} 지구 반지름
-                </p>
-              </div>
+					{activePad === 'history' && (
+						<div>
+							<div className="flex items-center justify-between mb-2">
+								<p className="font-semibold">최근 10개 계산</p>
+								<button onClick={() => setHistory([])} className={`text-sm ${isDark ? 'text-red-300' : 'text-red-500'}`}>
+									기록 삭제
+								</button>
+							</div>
+							<div className="max-h-72 overflow-y-auto space-y-2">
+								{history.length === 0 && <p className="text-sm text-gray-500">기록 없음</p>}
+								{history.map((entry, idx) => (
+									<div
+										key={`${entry.expression}-${idx}`}
+										className={`p-3 rounded-xl cursor-pointer ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+										onClick={() => {
+											setInput(entry.expression);
+											setResult(entry.result);
+										}}
+									>
+										<p className="text-sm break-words">{entry.expression}</p>
+										<p className="text-sm font-semibold text-green-500">= {entry.result}</p>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
+				</motion.div>
 
-              <div className={`p-4 rounded text-sm ${isDark ? 'bg-gray-700' : 'bg-yellow-50'}`}>
-                <p className="font-semibold mb-2">💡 예시:</p>
-                <ul className={`space-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• 태양 (1 M☉): r_s ≈ 2.95 km</li>
-                  <li>• Sgr A* (4×10⁶ M☉): r_s ≈ 12 백만 km</li>
-                  <li>• 지구 크기: r_s = 8.9 mm</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
+				<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="space-y-6">
+					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
+						<h2 className="text-xl font-bold mb-4">다항식 근 찾기</h2>
+						<p className={`text-sm mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+							최고차항부터 계수 입력 (예: x² - 3x + 2 → <span className="font-mono">1,-3,2</span>)
+						</p>
+						<input
+							value={polyInput}
+							onChange={(e) => setPolyInput(e.target.value)}
+							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+						/>
+						<button onClick={handlePolynomialSolve} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
+							근 계산하기
+						</button>
+						{polyError && <p className="text-sm text-red-400 mt-3">{polyError}</p>}
+						{polyOutput.length > 0 && (
+							<ul className="mt-4 space-y-1 text-sm font-mono">
+								{polyOutput.map((root, idx) => (
+									<li key={idx}>x{idx + 1} = {root}</li>
+								))}
+							</ul>
+						)}
+					</div>
 
-      {/* ISCO 궤도 */}
-      {activeCalc === 'isco' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className={`p-6 rounded-lg border ${containerClass}`}
-        >
-          <h2 className="text-2xl font-bold mb-4">ISCO (최내 안정 원형궤도)</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 입력 */}
-            <div className="space-y-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  블랙홀 질량 (태양질량 M☉)
-                </label>
-                <input
-                  type="number"
-                  value={iscoInput.mass}
-                  onChange={(e) => setIscoInput({ ...iscoInput, mass: parseFloat(e.target.value) || 0 })}
-                  min="1"
-                  max="1e10"
-                  step="1"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-              </div>
+					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
+						<h2 className="text-xl font-bold mb-4">미분 계산</h2>
+						<input
+							value={derivativeExpression}
+							onChange={(e) => setDerivativeExpression(e.target.value)}
+							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+							placeholder="f(x) = "
+						/>
+						<div className="flex items-center gap-3 mb-3">
+							<label className="text-sm">변수</label>
+							<input
+								value={derivativeVariable}
+								onChange={(e) => setDerivativeVariable(e.target.value)}
+								className={`w-16 text-center px-2 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+							/>
+							<button onClick={handleDerivative} className={`flex-1 py-2 rounded-xl font-semibold ${operatorClass}`}>
+								d/d{derivativeVariable}
+							</button>
+						</div>
+						{derivativeResult && <p className="text-sm font-mono text-green-400">{derivativeResult}</p>}
+					</div>
 
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  회전 매개변수 a* (0~1)
-                </label>
-                <input
-                  type="number"
-                  value={iscoInput.spin}
-                  onChange={(e) => setIscoInput({ ...iscoInput, spin: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) })}
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  0: 비회전(Schwarzschild), 1: 극단적 회전(Kerr)
-                </p>
-              </div>
+					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
+						<h2 className="text-xl font-bold mb-4">수치 적분</h2>
+						<input
+							value={integralExpression}
+							onChange={(e) => setIntegralExpression(e.target.value)}
+							className={`w-full mb-3 px-4 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+							placeholder="f(x)"
+						/>
+						<div className="flex items-center gap-3 mb-3">
+							<label className="text-sm">변수</label>
+							<input
+								value={integralVariable}
+								onChange={(e) => setIntegralVariable(e.target.value)}
+								className={`w-20 text-center px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+							/>
+							<input
+								value={integralBounds.from}
+								onChange={(e) => setIntegralBounds((prev) => ({ ...prev, from: e.target.value }))}
+								className={`flex-1 px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+								placeholder="하한"
+							/>
+							<input
+								value={integralBounds.to}
+								onChange={(e) => setIntegralBounds((prev) => ({ ...prev, to: e.target.value }))}
+								className={`flex-1 px-3 py-2 rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+								placeholder="상한"
+							/>
+						</div>
+						<button onClick={handleIntegral} className={`w-full py-3 rounded-xl font-semibold ${operatorClass}`}>
+							∫ 계산하기
+						</button>
+						{integralError && <p className="text-sm text-red-400 mt-3">{integralError}</p>}
+						{integralResult && <p className="text-sm font-mono text-green-400 mt-3">{integralResult}</p>}
+					</div>
 
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  Schwarzschild ISCO
-                </label>
-                <div className={`p-3 rounded text-sm font-mono ${
-                  isDark ? 'bg-gray-700' : 'bg-gray-100'
-                }`}>
-                  r_ISCO = 6 GM/c²
-                </div>
-              </div>
-            </div>
-
-            {/* 결과 */}
-            <div className="space-y-4">
-              <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                <p className={`text-sm font-semibold mb-2 ${
-                  isDark ? 'text-gray-300' : 'text-gray-600'
-                }`}>
-                  ISCO 반지름
-                </p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {calcISCO().toFixed(2)} km
-                </div>
-                <p className={`text-xs mt-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Schwarzschild 반지름의 {(calcISCO() / (iscoInput.mass * 1.477 * 3)).toFixed(1)}배
-                </p>
-              </div>
-
-              <div className={`p-4 rounded text-sm ${isDark ? 'bg-gray-700' : 'bg-yellow-50'}`}>
-                <p className="font-semibold mb-2">💡 해석:</p>
-                <ul className={`space-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• a*=0 (Schwarzschild): r_ISCO = 6 GM/c²</li>
-                  <li>• a*=1 (극단 Kerr): r_ISCO = GM/c² (r_s/2)</li>
-                  <li>• 회전 블랙홀은 ISCO 더 가까움</li>
-                  <li>• 강착 에너지 효율 ∝ 1 - √(1 - 2/r_ISCO)</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* 별의 주계열 수명 */}
-      {activeCalc === 'lifetime' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className={`p-6 rounded-lg border ${containerClass}`}
-        >
-          <h2 className="text-2xl font-bold mb-4">별의 주계열 수명</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 입력 */}
-            <div className="space-y-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  별의 질량 (태양질량 M☉)
-                </label>
-                <input
-                  type="number"
-                  value={luminosityInput.mass}
-                  onChange={(e) => setLuminosityInput({ ...luminosityInput, mass: parseFloat(e.target.value) || 0.1 })}
-                  min="0.1"
-                  max="100"
-                  step="0.1"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  작은 별: 0.1~0.5, 태양: 1, 대질량: 20~50
-                </p>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  공식
-                </label>
-                <div className={`p-3 rounded text-sm font-mono ${
-                  isDark ? 'bg-gray-700' : 'bg-gray-100'
-                }`}>
-                  t ≈ 10 Gyr × (M/M☉) / L
-                  <br className="mt-2" />
-                  L ≈ (M/M☉)^3.5
-                </div>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  참고
-                </label>
-                <ul className={`text-xs space-y-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• 질량-광도 관계: 더 무거운 별일수록 빠르게 연료 소진</li>
-                  <li>• 우주 나이: ~13.8 Gyr</li>
-                  <li>• 대질량 별: 수백만 년 내 초신성</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* 결과 */}
-            <div className="space-y-4">
-              <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                <p className={`text-sm font-semibold mb-2 ${
-                  isDark ? 'text-gray-300' : 'text-gray-600'
-                }`}>
-                  주계열 수명
-                </p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {calcLifetime().toFixed(2)} Gyr
-                </div>
-                <p className={`text-xs mt-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  = {(calcLifetime() * 1e9).toExponential(2)} 년
-                </p>
-              </div>
-
-              <div className={`p-4 rounded text-sm ${isDark ? 'bg-gray-700' : 'bg-yellow-50'}`}>
-                <p className="font-semibold mb-2">💡 예시:</p>
-                <ul className={`space-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• M=0.1 M☉: ~700 Gyr (우주보다 오래)</li>
-                  <li>• M=1 M☉ (태양): ~10 Gyr</li>
-                  <li>• M=10 M☉: ~10 Myr (1천만 년)</li>
-                  <li>• M=50 M☉: ~2 Myr (200만 년)</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* 광도 거리 */}
-      {activeCalc === 'lumdist' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className={`p-6 rounded-lg border ${containerClass}`}
-        >
-          <h2 className="text-2xl font-bold mb-4">광도 거리 (Luminosity Distance)</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 입력 */}
-            <div className="space-y-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  적색편이 (z)
-                </label>
-                <input
-                  type="number"
-                  value={lumDistInput.redshift}
-                  onChange={(e) => setLumDistInput({ ...lumDistInput, redshift: parseFloat(e.target.value) || 0 })}
-                  min="0"
-                  max="10"
-                  step="0.1"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  근처 은하: z~0.01, 먼 은하: z~1, 초기 은하: z~10+
-                </p>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  공식
-                </label>
-                <div className={`p-3 rounded text-sm font-mono ${
-                  isDark ? 'bg-gray-700' : 'bg-gray-100'
-                }`}>
-                  d_L = (1+z)×d_c
-                  <br className="mt-2" />
-                  d_c: 공움직임 거리
-                </div>
-              </div>
-            </div>
-
-            {/* 결과 */}
-            <div className="space-y-4">
-              <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                <p className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                  광도 거리
-                </p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {calcLuminosityDistance().toFixed(1)} Mpc
-                </div>
-                <p className={`text-xs mt-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  = {(calcLuminosityDistance() * 3.086e22).toExponential(2)} m
-                </p>
-              </div>
-
-              <div className={`p-4 rounded text-sm ${isDark ? 'bg-gray-700' : 'bg-yellow-50'}`}>
-                <p className="font-semibold mb-2">💡 용도:</p>
-                <ul className={`space-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• 겉보기 광도 → 절대 광도 변환</li>
-                  <li>• 초신성 거리 측정</li>
-                  <li>• 우주론 검증</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* CMB 온도 */}
-      {activeCalc === 'cmb' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className={`p-6 rounded-lg border ${containerClass}`}
-        >
-          <h2 className="text-2xl font-bold mb-4">우주 마이크로파 배경 온도</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* 입력 */}
-            <div className="space-y-6">
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  적색편이 (z)
-                </label>
-                <input
-                  type="number"
-                  value={cmbInput.redshift}
-                  onChange={(e) => setCmbInput({ redshift: parseFloat(e.target.value) || 0 })}
-                  min="0"
-                  max="10000"
-                  step="100"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClass}`}
-                />
-                <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  재결합: z~1100, 초기 우주: z~10000+
-                </p>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-semibold mb-2 ${labelClass}`}>
-                  공식
-                </label>
-                <div className={`p-3 rounded text-sm font-mono ${
-                  isDark ? 'bg-gray-700' : 'bg-gray-100'
-                }`}>
-                  T(z) = T₀(1+z)
-                  <br className="mt-2" />
-                  T₀ = 2.725 K
-                </div>
-              </div>
-            </div>
-
-            {/* 결과 */}
-            <div className="space-y-4">
-              <div className={`p-6 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
-                <p className={`text-sm font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                  CMB 온도
-                </p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {calcCMBTemperature().toFixed(1)} K
-                </div>
-                <p className={`text-xs mt-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  = {(calcCMBTemperature() * 8.617e-5).toExponential(2)} eV
-                </p>
-              </div>
-
-              <div className={`p-4 rounded text-sm ${isDark ? 'bg-gray-700' : 'bg-yellow-50'}`}>
-                <p className="font-semibold mb-2">💡 의미:</p>
-                <ul className={`space-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  <li>• 현재(z=0): T = 2.725 K</li>
-                  <li>• 재결합(z=1100): T ≈ 3000 K</li>
-                  <li>• 우주 나이 비례</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </div>
-  );
+					<div className={`p-6 rounded-2xl border shadow-sm ${containerClass}`}>
+						<h2 className="text-xl font-bold mb-3">지원 기능 요약</h2>
+						<ul className={`text-sm space-y-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+							<li>• 복소수 연산 (예: (3+4i)*(2-i))</li>
+							<li>• 다항식 근 (최대 10차, Durand-Kerner 방식)</li>
+							<li>• 심볼릭 미분 (math.js 엔진)</li>
+							<li>• 수치 적분 (Simpson rule)</li>
+							<li>• 내장 상수 및 함수: π, e, i, trig/log, pow</li>
+						</ul>
+					</div>
+				</motion.div>
+			</div>
+		</div>
+	);
 }

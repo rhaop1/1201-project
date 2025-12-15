@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import { getCurrentUser } from '../utils/auth';
@@ -8,7 +7,6 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp
 
 export default function Notes() {
   const { isDark } = useTheme();
-  const navigate = useNavigate();
   const user = getCurrentUser();
   
   const [notes, setNotes] = useState([]);
@@ -136,7 +134,6 @@ export default function Notes() {
         await deleteDoc(doc(db, 'notes', id));
         const updatedNotes = notes.filter(note => note.id !== id);
         setNotes(updatedNotes);
-        localStorage.setItem('notes', JSON.stringify(updatedNotes));
         if (selectedNote === id) {
           setSelectedNote(null);
           setNewNote(false);
