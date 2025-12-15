@@ -3,7 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { getCurrentUser, setCurrentUser } from '../utils/auth';
 import { db } from '../config/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
@@ -20,16 +20,50 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // localStorage 로드
+  // Firestore에서 프로필 로드
   useEffect(() => {
-    if (user) {
-      setFormData({
-        username: user.username || '',
-        email: user.email || '',
-        affiliation: user.affiliation || '',
-        bio: user.bio || '',
-      });
-    }
+    const loadProfile = async () => {
+      if (!user?.username) return;
+
+      try {
+        // Firestore에서 먼저 로드 시도
+        const docId = user.username;
+        const profileRef = doc(db, 'profiles', docId);
+        const profileSnap = await getDoc(profileRef);
+        
+        if (profileSnap.exists()) {
+          const firestoreData = profileSnap.data();
+          setFormData({
+            username: firestoreData.username || user.username || '',
+            email: firestoreData.email || user.email || '',
+            affiliation: firestoreData.affiliation || '',
+            bio: firestoreData.bio || '',
+          });
+          // 로컬스토리지도 업데이트
+          localStorage.setItem('user', JSON.stringify(firestoreData));
+          console.log('Firestore에서 프로필 로드 성공');
+        } else {
+          // Firestore에 없으면 로컬스토리지 사용
+          setFormData({
+            username: user.username || '',
+            email: user.email || '',
+            affiliation: user.affiliation || '',
+            bio: user.bio || '',
+          });
+          console.log('로컬스토리지에서 프로필 로드');
+        }
+      } catch (error) {
+        console.log('Firestore 로드 실패, 로컬스토리지 사용:', error);
+        setFormData({
+          username: user.username || '',
+          email: user.email || '',
+          affiliation: user.affiliation || '',
+          bio: user.bio || '',
+        });
+      }
+    };
+
+    loadProfile();
   }, [user]);
 
   const handleChange = (e) => {
@@ -46,7 +80,6 @@ export default function Profile() {
     setMessage('');
 
     try {
-      // 1. localStorage에 먼저 저장 (필수)
       const updatedUser = {
         ...user,
         username: formData.username,
@@ -55,22 +88,24 @@ export default function Profile() {
         bio: formData.bio,
       };
       
+      // 1. localStorage에 저장 (로컬 캐시)
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setCurrentUser(updatedUser);
       
-      // 2. Firestore에도 저장 시도 (선택사항)
-      try {
-        const docId = user?.username || 'profile';
-        const profileRef = doc(db, 'profiles', docId);
-        await setDoc(profileRef, {
-          ...updatedUser,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (firestoreError) {
-        console.log('Firestore 저장 실패 (로컬저장은 완료):', firestoreError);
-      }
+      // 2. Firestore에 저장 (클라우드 - 필수)
+      const docId = user?.username || 'profile';
+      const profileRef = doc(db, 'profiles', docId);
       
-      setMessage('✅ 프로필이 저장되었습니다.');
+      await setDoc(profileRef, {
+        username: formData.username,
+        email: formData.email,
+        affiliation: formData.affiliation,
+        bio: formData.bio,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      
+      console.log('프로필 저장 완료 (Firestore:', docId, ')');
+      setMessage('✅ 프로필이 저장되었습니다. 모든 기기에서 동기화됩니다.');
       setIsEditing(false);
       
       setTimeout(() => {
