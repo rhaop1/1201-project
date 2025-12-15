@@ -1,39 +1,64 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
-import { getCurrentUser, setCurrentUser } from '../utils/auth';
+import { getCurrentUser } from '../utils/auth';
 import { db } from '../config/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
   const user = getCurrentUser();
-  const [initialized, setInitialized] = useState(false);
 
   const [formData, setFormData] = useState({
-    username: user?.username || '',
-    email: user?.email || '',
-    affiliation: user?.affiliation || '',
-    bio: user?.bio || '',
+    username: '',
+    email: '',
+    affiliation: '',
+    bio: '',
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
-  // 초기 로드 - 한 번만 실행
+  // Firestore에서 프로필 로드 - 한 번만
   useEffect(() => {
-    if (user && !initialized) {
-      setFormData({
-        username: user.username || '',
-        email: user.email || '',
-        affiliation: user.affiliation || '',
-        bio: user.bio || '',
-      });
-      setInitialized(true);
-      console.log('프로필 초기화됨:', user.username);
+    if (!user?.username) {
+      setLoading(false);
+      return;
     }
-  }, [initialized, user?.username]);
+
+    const loadFromFirestore = async () => {
+      try {
+        const profileRef = doc(db, 'profiles', user.username);
+        const snapshot = await getDoc(profileRef);
+        
+        if (snapshot.exists()) {
+          setFormData(snapshot.data());
+          console.log('✅ Firestore에서 프로필 로드:', user.username);
+        } else {
+          setFormData({
+            username: user.username,
+            email: user.email || '',
+            affiliation: '',
+            bio: '',
+          });
+          console.log('📝 새 프로필 (Firestore에 없음)');
+        }
+      } catch (err) {
+        console.error('❌ Firestore 로드 실패:', err);
+        setFormData({
+          username: user.username,
+          email: user.email || '',
+          affiliation: '',
+          bio: '',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFromFirestore();
+  }, [user?.username]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,46 +71,24 @@ export default function Profile() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage('');
 
     try {
-      const updatedUser = {
-        ...user,
-        username: formData.username,
-        email: formData.email,
-        affiliation: formData.affiliation,
-        bio: formData.bio,
-      };
-      
-      // 1. localStorage에 저장 (로컬 캐시)
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setCurrentUser(updatedUser);
-      
-      // 2. Firestore에 저장 (클라우드 - 필수)
-      const docId = user?.username || 'profile';
-      const profileRef = doc(db, 'profiles', docId);
-      
-      await setDoc(profileRef, {
+      // Firestore에 저장
+      await setDoc(doc(db, 'profiles', user.username), {
         username: formData.username,
         email: formData.email,
         affiliation: formData.affiliation,
         bio: formData.bio,
         updatedAt: serverTimestamp(),
-      }, { merge: true });
-      
-      console.log('✅ 프로필 저장 완료 (Firestore:', docId, ')');
-      setMessage('✅ 프로필이 저장되었습니다. 모든 기기에서 동기화됩니다.');
+      });
+
+      console.log('✅ Firestore에 저장됨:', user.username);
+      setMessage('✅ 프로필이 저장되었습니다.');
       setIsEditing(false);
-      
-      setTimeout(() => {
-        setMessage('');
-      }, 3000);
-      
-      window.dispatchEvent(new Event('profile-updated'));
+
+      setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error('❌ 프로필 저장 실패:', err);
-      console.error('오류 코드:', err.code);
-      console.error('오류 메시지:', err.message);
+      console.error('❌ 저장 실패:', err.code, err.message);
       setMessage('❌ 저장 실패: ' + err.message);
     } finally {
       setLoading(false);
@@ -263,15 +266,6 @@ export default function Profile() {
               </p>
               <p className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                 {formData.bio || '미입력'}
-              </p>
-            </div>
-
-            <div>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                평판 점수
-              </p>
-              <p className={`text-lg font-medium text-yellow-500`}>
-                {user.reputation_score || 0} 점
               </p>
             </div>
 
