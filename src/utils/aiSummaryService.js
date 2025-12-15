@@ -1,10 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js 워커 설정 - 로컬 node_modules에서 로드
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.js',
-  import.meta.url,
-).href;
+// PDF.js 워커 설정
+const workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 // Hugging Face 무료 API (환경변수에서 로드)
 const HF_API_KEY = import.meta.env.VITE_HF_API_KEY || '';
@@ -14,45 +12,47 @@ const HF_API_URL = 'https://api-inference.huggingface.co/models/facebook/bart-la
  * PDF 파일에서 텍스트 추출
  */
 export async function extractTextFromPDF(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     
-    reader.onload = async (e) => {
+    let fullText = '';
+    const pageCount = Math.min(pdf.numPages, 10);
+    
+    console.log(`PDF 페이지 수: ${pdf.numPages}, 추출할 페이지: ${pageCount}`);
+    
+    for (let i = 1; i <= pageCount; i++) {
       try {
-        const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
-        let fullText = '';
-        const pageCount = Math.min(pdf.numPages, 10); // 최대 10페이지까지 추출
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
         
-        for (let i = 1; i <= pageCount; i++) {
-          try {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items
-              .map(item => (typeof item === 'object' && item.str ? item.str : ''))
-              .join(' ');
-            
-            if (pageText.trim()) {
-              fullText += pageText + '\n';
-            }
-          } catch (pageError) {
-            console.warn(`페이지 ${i} 추출 실패:`, pageError);
-            continue;
+        let pageText = '';
+        for (const item of textContent.items) {
+          if (item.str && item.str.trim()) {
+            pageText += item.str + ' ';
           }
         }
         
-        if (!fullText.trim()) {
-          reject(new Error('PDF에서 텍스트를 추출할 수 없습니다.'));
-        } else {
-          resolve(fullText);
+        if (pageText.trim()) {
+          fullText += pageText + '\n';
+          console.log(`페이지 ${i} 추출 완료 (${pageText.length}자)`);
         }
-      } catch (error) {
-        reject(new Error('PDF 텍스트 추출 실패: ' + error.message));
+      } catch (pageError) {
+        console.warn(`페이지 ${i} 추출 실패:`, pageError);
+        continue;
       }
-    };
+    }
     
-    reader.onerror = () => reject(new Error('파일 읽기 실패'));
-    reader.readAsArrayBuffer(file);
-  });
+    if (!fullText.trim()) {
+      throw new Error('PDF에서 텍스트를 추출할 수 없습니다. 이미지 기반 PDF일 수 있습니다.');
+    }
+    
+    console.log(`총 추출 텍스트: ${fullText.length}자`);
+    return fullText;
+  } catch (error) {
+    console.error('PDF 텍스트 추출 실패:', error);
+    throw new Error('PDF 텍스트 추출 실패: ' + error.message);
+  }
 }
 
 /**
