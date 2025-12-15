@@ -57,6 +57,8 @@ export default function Forum() {
         replies: 0,
       });
       
+      console.log('✅ 게시물 저장 완료:', docRef.id);
+      
       // 로컬 상태 업데이트
       const newPostData = {
         id: docRef.id,
@@ -68,9 +70,12 @@ export default function Forum() {
       setFirebasePosts([newPostData, ...firebasePosts]);
       setNewPost({ title: '', category: 1, content: '' });
       setShowForm(false);
+      alert('게시물이 저장되었습니다.');
     } catch (error) {
-      console.error('게시물 저장 실패:', error);
-      alert('게시물 저장에 실패했습니다.');
+      console.error('❌ 게시물 저장 실패:', error);
+      console.error('오류 코드:', error.code);
+      console.error('오류 메시지:', error.message);
+      alert('게시물 저장에 실패했습니다: ' + error.message);
     } finally {
       setSubmitting(false);
     }

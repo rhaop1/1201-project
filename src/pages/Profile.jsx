@@ -104,7 +104,7 @@ export default function Profile() {
         updatedAt: serverTimestamp(),
       }, { merge: true });
       
-      console.log('프로필 저장 완료 (Firestore:', docId, ')');
+      console.log('✅ 프로필 저장 완료 (Firestore:', docId, ')');
       setMessage('✅ 프로필이 저장되었습니다. 모든 기기에서 동기화됩니다.');
       setIsEditing(false);
       
@@ -114,7 +114,9 @@ export default function Profile() {
       
       window.dispatchEvent(new Event('profile-updated'));
     } catch (err) {
-      console.error('프로필 저장 실패:', err);
+      console.error('❌ 프로필 저장 실패:', err);
+      console.error('오류 코드:', err.code);
+      console.error('오류 메시지:', err.message);
       setMessage('❌ 저장 실패: ' + err.message);
     } finally {
       setLoading(false);
