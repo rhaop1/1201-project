@@ -1,71 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
-import { getCurrentUser } from '../utils/auth';
-import { auth, db } from '../config/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { getCurrentUser, setCurrentUser } from '../utils/auth';
+import { db } from '../config/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
   const user = getCurrentUser();
-  const [authUser, setAuthUser] = useState(null);
 
   const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    affiliation: '',
-    bio: '',
+    username: user?.username || '',
+    email: user?.email || '',
+    affiliation: user?.affiliation || '',
+    bio: user?.bio || '',
   });
-
-  // Firebase 인증 사용자 확인
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      setAuthUser(firebaseUser);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Firestore에서 프로필 로드
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        // Firebase UID 또는 localStorage 사용자명으로 저장
-        const userId = authUser?.uid || user?.username || 'anonymous';
-        const profileRef = doc(db, 'profiles', userId);
-        const profileSnap = await getDoc(profileRef);
-        
-        if (profileSnap.exists()) {
-          setFormData(profileSnap.data());
-          localStorage.setItem('user', JSON.stringify(profileSnap.data()));
-        } else {
-          const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-          setFormData({
-            username: savedUser.username || user?.username || '',
-            email: savedUser.email || user?.email || '',
-            affiliation: savedUser.affiliation || user?.affiliation || '',
-            bio: savedUser.bio || user?.bio || '',
-          });
-        }
-      } catch (error) {
-        console.log('프로필 로드 실패, localStorage 사용:', error);
-        const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        setFormData({
-          username: savedUser.username || user?.username || '',
-          email: savedUser.email || user?.email || '',
-          affiliation: savedUser.affiliation || user?.affiliation || '',
-          bio: savedUser.bio || user?.bio || '',
-        });
-      }
-    };
-    
-    if (authUser || user) {
-      loadProfile();
-    }
-  }, [authUser, user]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // localStorage 로드
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        email: user.email || '',
+        affiliation: user.affiliation || '',
+        bio: user.bio || '',
+      });
+    }
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -81,25 +46,41 @@ export default function Profile() {
     setMessage('');
 
     try {
-      // Firebase UID 또는 사용자명으로 저장
-      const userId = authUser?.uid || user?.username || 'anonymous';
-      const profileRef = doc(db, 'profiles', userId);
+      // 1. localStorage에 먼저 저장 (필수)
+      const updatedUser = {
+        ...user,
+        username: formData.username,
+        email: formData.email,
+        affiliation: formData.affiliation,
+        bio: formData.bio,
+      };
       
-      await setDoc(profileRef, {
-        ...formData,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
       
-      // localStorage 백업
-      localStorage.setItem('user', JSON.stringify(formData));
+      // 2. Firestore에도 저장 시도 (선택사항)
+      try {
+        const docId = user?.username || 'profile';
+        const profileRef = doc(db, 'profiles', docId);
+        await setDoc(profileRef, {
+          ...updatedUser,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (firestoreError) {
+        console.log('Firestore 저장 실패 (로컬저장은 완료):', firestoreError);
+      }
       
-      setMessage('프로필이 업데이트되었습니다.');
+      setMessage('✅ 프로필이 저장되었습니다.');
       setIsEditing(false);
-      setTimeout(() => setMessage(''), 2000);
+      
+      setTimeout(() => {
+        setMessage('');
+      }, 3000);
+      
       window.dispatchEvent(new Event('profile-updated'));
     } catch (err) {
-      console.error('프로필 업데이트 실패:', err);
-      setMessage('프로필 업데이트 실패: ' + err.message);
+      console.error('프로필 저장 실패:', err);
+      setMessage('❌ 저장 실패: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +102,7 @@ export default function Profile() {
 
       {message && (
         <div className={`mb-4 p-4 rounded-lg ${
-          message.includes('실패')
+          message.includes('❌')
             ? 'bg-red-50 text-red-700 dark:bg-red-900 dark:text-red-200'
             : 'bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200'
         }`}>
