@@ -3,11 +3,12 @@ import { useTheme } from '../context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { getCurrentUser, setCurrentUser } from '../utils/auth';
 import { db } from '../config/firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Profile() {
   const { isDark } = useTheme();
   const user = getCurrentUser();
+  const [initialized, setInitialized] = useState(false);
 
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -20,51 +21,19 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Firestore에서 프로필 로드
+  // 초기 로드 - 한 번만 실행
   useEffect(() => {
-    const loadProfile = async () => {
-      if (!user?.username) return;
-
-      try {
-        // Firestore에서 먼저 로드 시도
-        const docId = user.username;
-        const profileRef = doc(db, 'profiles', docId);
-        const profileSnap = await getDoc(profileRef);
-        
-        if (profileSnap.exists()) {
-          const firestoreData = profileSnap.data();
-          setFormData({
-            username: firestoreData.username || user.username || '',
-            email: firestoreData.email || user.email || '',
-            affiliation: firestoreData.affiliation || '',
-            bio: firestoreData.bio || '',
-          });
-          // 로컬스토리지도 업데이트
-          localStorage.setItem('user', JSON.stringify(firestoreData));
-          console.log('Firestore에서 프로필 로드 성공');
-        } else {
-          // Firestore에 없으면 로컬스토리지 사용
-          setFormData({
-            username: user.username || '',
-            email: user.email || '',
-            affiliation: user.affiliation || '',
-            bio: user.bio || '',
-          });
-          console.log('로컬스토리지에서 프로필 로드');
-        }
-      } catch (error) {
-        console.log('Firestore 로드 실패, 로컬스토리지 사용:', error);
-        setFormData({
-          username: user.username || '',
-          email: user.email || '',
-          affiliation: user.affiliation || '',
-          bio: user.bio || '',
-        });
-      }
-    };
-
-    loadProfile();
-  }, [user]);
+    if (user && !initialized) {
+      setFormData({
+        username: user.username || '',
+        email: user.email || '',
+        affiliation: user.affiliation || '',
+        bio: user.bio || '',
+      });
+      setInitialized(true);
+      console.log('프로필 초기화됨:', user.username);
+    }
+  }, [initialized, user?.username]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
