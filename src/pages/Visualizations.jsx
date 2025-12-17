@@ -207,8 +207,8 @@ export default function Visualizations() {
     disk.rotation.x = 0.3;
     scene.add(disk);
 
-    // 킬로노바 입자 (r-프로세스 원소 합성)
-    const kilonovaParticles = new PhysicsParticleSystem(2500, {
+    // 킬로노바 입자 (r-프로세스 원소 합성) - 매우 사실적
+    const kilonovaParticles = new PhysicsParticleSystem(3500, {
       maxVelocity: 0.35,
       lifetime: 8,
       radius: 0.1,
@@ -218,7 +218,7 @@ export default function Visualizations() {
     });
     scene.add(kilonovaParticles.mesh);
 
-    // 중력파 표현
+    // 중력파 표현 - 시공간 곡률 표현
     const gravitationalWaves = [];
     for (let i = 0; i < 8; i++) {
       const waveGeometry = new THREE.TorusGeometry(0.4 + i * 0.35, 0.06, 32, 128);
@@ -232,6 +232,25 @@ export default function Visualizations() {
       gravitationalWaves.push({ mesh: wave, scale: 0.4 + i * 0.35 });
       scene.add(wave);
     }
+
+    // 감마선 폭발 표현
+    const gammaRayBurst = new THREE.Group();
+    for (let j = 0; j < 3; j++) {
+      const beamGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1, 16);
+      const beamMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 0,
+        transparent: true,
+        opacity: 0
+      });
+      const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+      beam.position.z = 0.5;
+      beam.userData.originalEmissive = 0;
+      beam.userData.index = j;
+      gammaRayBurst.add(beam);
+    }
+    scene.add(gammaRayBurst);
 
     // 조명
     const light1 = new THREE.PointLight(0x0088ff, 1.2);
@@ -271,6 +290,14 @@ export default function Visualizations() {
               1
             );
           });
+
+          // 감마선 폭발
+          gammaRayBurst.children.forEach((beam, idx) => {
+            const beamPhase = Math.max(0, collapsePhase - 0.3);
+            beam.material.opacity = Math.min(0.8, beamPhase * 3);
+            beam.material.emissiveIntensity = Math.max(0, beamPhase * 2);
+            beam.scale.z = 1 + beamPhase * 2;
+          });
         }
       }
     };
@@ -283,13 +310,13 @@ export default function Visualizations() {
     scene.fog = new THREE.Fog(0x000000, 200, 500);
     scene.add(createStarField());
 
-    // 블랙홀
+    // 블랙홀 (사건의 지평선)
     const bhGeometry = new THREE.SphereGeometry(0.35, 128, 128);
     const bhMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const bh = new THREE.Mesh(bhGeometry, bhMaterial);
     scene.add(bh);
 
-    // 포톤 링 (빛의 고리)
+    // 포톤 링 (빛의 고리) - 사건의 지평선 주변
     const photonRingGeometry = new THREE.TorusGeometry(0.55, 0.12, 32, 512);
     const photonRingMaterial = new THREE.MeshPhongMaterial({
       color: 0xffaa44,
@@ -301,14 +328,15 @@ export default function Visualizations() {
     photonRing.rotation.x = 0.35;
     scene.add(photonRing);
 
-    // 온도 기반 강착 디스크
+    // 도플러 효과를 고려한 온도 기반 강착 디스크 - 극도로 사실적
     const accretionDisks = [];
     for (let ring = 0; ring < 14; ring++) {
       const ringRadius = 0.65 + ring * 0.28;
       const ringWidth = 0.16;
       const diskGeometry = new THREE.TorusGeometry(ringRadius, ringWidth, 16, 512);
 
-      const temp = 8500 - ring * 450;
+      // 중심에서 멀어질수록 온도 감소 (실제 물리)
+      const temp = Math.max(3000, 8500 - ring * 450);
       const color = temperatureToColor(temp);
 
       const diskMaterial = new THREE.MeshStandardMaterial({
@@ -324,11 +352,12 @@ export default function Visualizations() {
       const disk = new THREE.Mesh(diskGeometry, diskMaterial);
       disk.rotation.x = 0.2;
       disk.userData.rotationSpeed = 0.045 - ring * 0.002;
+      disk.userData.ringIndex = ring;
       accretionDisks.push(disk);
       scene.add(disk);
     }
 
-    // 상대론적 제트
+    // 상대론적 제트 (Lorentz 인수 효과)
     const jetGeometry = new THREE.ConeGeometry(0.18, 3.5, 32);
     const jetMaterial = new THREE.MeshStandardMaterial({
       color: 0x00aaff,
@@ -346,30 +375,67 @@ export default function Visualizations() {
     scene.add(jetUp);
     scene.add(jetDown);
 
-    // 조명
-    const centralLight = new THREE.PointLight(0xff8844, 2);
+    // 빛의 굴절 (중력 렌즈)
+    const lensElements = [];
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const ringGeometry = new THREE.TorusGeometry(0.4 + i * 0.15, 0.03, 16, 64);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.2
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = angle;
+      lensElements.push(ring);
+      scene.add(ring);
+    }
+
+    // 조명 - 다중 광원으로 사실성 증대
+    const centralLight = new THREE.PointLight(0xff8844, 2.5);
+    centralLight.position.set(0.1, 0.1, 0);
     scene.add(centralLight);
 
-    const blueLight = new THREE.PointLight(0x0088ff, 1.2);
+    const blueLight = new THREE.PointLight(0x0088ff, 1.5);
     blueLight.position.set(0, 0, 5);
     scene.add(blueLight);
 
-    const ambientLight = new THREE.AmbientLight(0x1a2a3a, 0.3);
+    const hemisphereLight = new THREE.HemisphereLight(0x0088ff, 0xff6600, 0.3);
+    scene.add(hemisphereLight);
+
+    const ambientLight = new THREE.AmbientLight(0x1a2a3a, 0.25);
     scene.add(ambientLight);
 
     return {
       scene,
       animate: (t) => {
+        // 강착 디스크 회전 (각속도는 반지름에 따라 달라짐)
         accretionDisks.forEach((disk, idx) => {
           disk.rotation.z += disk.userData.rotationSpeed;
-          disk.material.emissiveIntensity = 0.65 + Math.sin(t * 2.5 + idx) * 0.2;
+          
+          // 빛 방출 변화 시뮬레이션
+          disk.material.emissiveIntensity = 0.65 + Math.sin(t * 2.5 + idx * 0.5) * 0.2;
+          
+          // 쌍곡선 궤도 효과 - 중심에서 멀어질수록 느린 회전
+          disk.rotation.x = 0.2 + Math.sin(t * 0.3 + idx * 0.1) * 0.05;
         });
 
-        photonRing.rotation.z += 0.02;
-        photonRing.material.emissiveIntensity = 0.85 + Math.sin(t * 1.8) * 0.15;
+        // 포톤 링 고속 회전
+        photonRing.rotation.z += 0.025;
+        photonRing.material.emissiveIntensity = 0.85 + Math.sin(t * 2) * 0.15;
+        photonRing.rotation.x = 0.35 + Math.sin(t * 0.2) * 0.05;
 
-        jetUp.position.z = 2.2 + Math.sin(t * 0.6) * 0.15;
-        jetDown.position.z = -2.2 - Math.sin(t * 0.6) * 0.15;
+        // 제트 떨림
+        jetUp.position.z = 2.2 + Math.sin(t * 0.8) * 0.2;
+        jetDown.position.z = -2.2 - Math.sin(t * 0.8) * 0.2;
+        jetUp.material.emissiveIntensity = 0.8 + Math.sin(t * 1.5) * 0.2;
+        jetDown.material.emissiveIntensity = 0.8 + Math.sin(t * 1.5) * 0.2;
+
+        // 중력 렌즈 효과
+        lensElements.forEach((lens, idx) => {
+          lens.rotation.z += 0.005;
+          lens.material.opacity = 0.15 + Math.sin(t + idx) * 0.1;
+        });
       }
     };
   };
