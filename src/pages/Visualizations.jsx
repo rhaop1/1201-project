@@ -18,7 +18,10 @@ export default function Visualizations() {
   const animationIdRef = useRef(null);
   const timeRef = useRef(0);
   const mouseRef = useRef({ x: 0, y: 0, down: false });
-  const uiUpdateIntervalRef = useRef(null);
+  const autoPlayRef = useRef(autoPlay);
+  const speedRef = useRef(speed);
+  const rotationRef = useRef(rotationMode);
+  const timeSliderRef = useRef(timeSlider);
 
   // Planck 법칙 기반 온도-색상 변환 (현실적인 천체 색상)
   const temperatureToColor = (temp) => {
@@ -931,89 +934,161 @@ export default function Visualizations() {
   );
   const containerClass = `${isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`;
 
-  // 시각화 초기화 (activeViz 변경 시만)
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const resizeRenderer = useCallback(() => {
+    const container = containerRef.current;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
 
-    // 기존 렌더러 정리
-    if (rendererRef.current) {
-      rendererRef.current.dispose();
-      containerRef.current.removeChild(rendererRef.current.domElement);
+    if (!container || !renderer || !camera) return;
+
+    const width = container.clientWidth || 800;
+    renderer.setSize(width, 500);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    camera.aspect = width / 500;
+    camera.updateProjectionMatrix();
+  }, []);
+
+  // 시각화 초기화 및 애니메이션 루프 구성
+  useEffect(() => {
+    if (!containerRef.current || !currentVizConfig) return;
+
+    const container = containerRef.current;
+
+    // 기존 렌더러 및 애니메이션 정리
+    if (animationIdRef.current) {
+      cancelAnimationFrame(animationIdRef.current);
+      animationIdRef.current = null;
     }
 
-    // 렌더러 생성
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(containerRef.current.clientWidth, 500);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true;
-    containerRef.current.appendChild(renderer.domElement);
+    if (rendererRef.current) {
+      rendererRef.current.dispose();
+      if (rendererRef.current.domElement.parentNode === container) {
+        container.removeChild(rendererRef.current.domElement);
+      }
+      rendererRef.current = null;
+    }
 
-    // 카메라
-    const camera = new THREE.PerspectiveCamera(
-      75,
-      containerRef.current.clientWidth / 500,
-      0.1,
-      1000
-    );
-    camera.position.z = 4;
+    // 렌더러 생성 (물리 기반 조명 활성화)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.physicallyCorrectLights = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = isDark ? 1.25 : 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (THREE.SRGBColorSpace) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+
+    const width = container.clientWidth || 800;
+    renderer.setSize(width, 500);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    container.appendChild(renderer.domElement);
+
+    // 카메라 구성
+    const camera = new THREE.PerspectiveCamera(70, width / 500, 0.1, 1000);
+    camera.position.set(0, 0, 4);
 
     // 시각화 생성
-    const vizConfig = currentVizConfig.create();
-    const scene = vizConfig.scene;
+    const { scene, animate: animateScene } = currentVizConfig.create();
 
     sceneRef.current = scene;
     cameraRef.current = camera;
     rendererRef.current = renderer;
-    timeRef.current = 0;
+    timeRef.current = autoPlayRef.current ? 0 : timeSliderRef.current;
 
-    // 마우스 이벤트
+    // 마우스 기반 회전
     const handleMouseMove = (e) => {
-      if (rotationMode) {
-        mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      }
+      mouseRef.current.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouseRef.current.y = -(e.clientY / window.innerHeight) * 2 + 1;
     };
-
     window.addEventListener('mousemove', handleMouseMove);
 
-    // 애니메이션 루프 - 렌더링만 (상태 변경 최소화)
-    const animate = () => {
-      animationIdRef.current = requestAnimationFrame(animate);
+    let lastFrame = performance.now();
+    let lastUiUpdate = lastFrame;
 
-      // timeRef.current 업데이트 (상태 변경 없음 - 순수 숫자 업데이트)
-      if (autoPlay) {
-        timeRef.current += 0.016 * speed;
-        if (timeRef.current >= 1) {
-          timeRef.current = 0;
+    const renderLoop = (now) => {
+      animationIdRef.current = requestAnimationFrame(renderLoop);
+      const delta = Math.min((now - lastFrame) / 1000, 0.1);
+      lastFrame = now;
+
+      if (autoPlayRef.current) {
+        timeRef.current = (timeRef.current + delta * speedRef.current) % 1;
+
+        if (now - lastUiUpdate >= 50) {
+          setTimeSlider(timeRef.current);
+          lastUiUpdate = now;
         }
       } else {
-        timeRef.current = timeSlider;
+        timeRef.current = timeSliderRef.current;
       }
 
-      // 카메라 회전
-      if (rotationMode) {
+      if (rotationRef.current) {
         camera.position.x = Math.sin(mouseRef.current.x * Math.PI) * 4;
         camera.position.y = mouseRef.current.y * 3;
-        camera.lookAt(0, 0, 0);
+      } else {
+        camera.position.x *= 0.9;
+        camera.position.y *= 0.9;
       }
+      camera.lookAt(0, 0, 0);
 
-      vizConfig.animate(timeRef.current);
+      animateScene?.(timeRef.current);
       renderer.render(scene, camera);
     };
 
-    animate();
+    animationIdRef.current = requestAnimationFrame((now) => {
+      lastFrame = now;
+      lastUiUpdate = now;
+      renderLoop(now);
+    });
 
-    // UI 업데이트를 별도의 인터벌로 분리 (20fps)
-    uiUpdateIntervalRef.current = setInterval(() => {
-      setTimeSlider(timeRef.current);
-    }, 50);
+    resizeRenderer();
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
-      if (uiUpdateIntervalRef.current) clearInterval(uiUpdateIntervalRef.current);
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        if (rendererRef.current.domElement.parentNode === container) {
+          container.removeChild(rendererRef.current.domElement);
+        }
+        rendererRef.current = null;
+      }
+      sceneRef.current = null;
+      cameraRef.current = null;
     };
-  }, [activeViz]);
+  }, [currentVizConfig, isDark, resizeRenderer]);
+
+  useEffect(() => {
+    window.addEventListener('resize', resizeRenderer);
+    return () => window.removeEventListener('resize', resizeRenderer);
+  }, [resizeRenderer]);
+
+  // 상태 변화 시 참조값 동기화
+  useEffect(() => {
+    autoPlayRef.current = autoPlay;
+    if (!autoPlay) {
+      const current = timeRef.current;
+      timeSliderRef.current = current;
+      if (Math.abs(timeSlider - current) > 0.001) {
+        setTimeSlider(current);
+      }
+    }
+  }, [autoPlay, timeSlider]);
+
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
+
+  useEffect(() => {
+    rotationRef.current = rotationMode;
+  }, [rotationMode]);
+
+  useEffect(() => {
+    timeSliderRef.current = timeSlider;
+    if (!autoPlayRef.current) {
+      timeRef.current = timeSlider;
+    }
+  }, [timeSlider]);
 
   return (
     <div className={`space-y-6 ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
