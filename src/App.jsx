@@ -12,7 +12,8 @@ import References from './pages/References';
 import Profile from './pages/Profile';
 import Bookmarks from './pages/Bookmarks';
 import Notes from './pages/Notes';
-import Visualizations from './pages/Visualizations';
+import Whiteboard from './pages/Whiteboard';
+import VirtualLab from './pages/VirtualLab';
 import Calculator from './pages/Calculator';
 import Login from './components/Login';
 import Signup from './components/Signup';
@@ -33,7 +34,8 @@ export default function App() {
             <Route path="/concepts" element={<Concepts />} />
             <Route path="/concepts/:slug" element={<ConceptDetail />} />
             <Route path="/papers" element={<PaperSummary />} />
-            <Route path="/visualizations" element={<Visualizations />} />
+            <Route path="/whiteboard" element={<Whiteboard />} />
+            <Route path="/virtual-lab" element={<VirtualLab />} />
             <Route path="/calculator" element={<Calculator />} />
             
             {/* 보호된 라우트 */}
