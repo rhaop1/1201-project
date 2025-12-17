@@ -1,387 +1,905 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar
-} from 'recharts';
 
 export default function Visualizations() {
   const { isDark } = useTheme();
-  
-  // 우주론 파라미터
-  const [omega_m, setOmega_m] = useState(0.3); // 물질 밀도 파라미터
-  const [omega_lambda, setOmega_lambda] = useState(0.7); // 암흑에너지 밀도 파라미터
-  const [h, setH] = useState(0.7); // 허블상수 스케일 (H0 = 100h km/s/Mpc)
-  const [w, setW] = useState(-1); // 암흑에너지 상태방정식 (w = -1은 우주상수)
-  
-  // 계산 결과
-  const [results, setResults] = useState(null);
-  const [hubbleData, setHubbleData] = useState([]);
+  const [activeViz, setActiveViz] = useState('inflation');
+  const [timeSlider, setTimeSlider] = useState(0.5);
+  const [speed, setSpeed] = useState(1);
+  const [autoPlay, setAutoPlay] = useState(true);
 
-  // 기본 상수
-  const H0 = h * 100; // km/s/Mpc
-  const c = 299792; // km/s
-  const Mpc_to_m = 3.086e22; // 1 Mpc in meters
+  const canvasRef = useRef(null);
 
-  // 허블함수 계산: H(z) = H0 * sqrt(Omega_m(1+z)^3 + Omega_lambda*(1+z)^(3(1+w)) + Omega_k(1+z)^2)
-  const hubbleFunction = (z) => {
-    const omega_k = Math.max(0, 1 - omega_m - omega_lambda);
-    const term_m = omega_m * Math.pow(1 + z, 3);
-    const term_lambda = omega_lambda * Math.pow(1 + z, 3 * (1 + w));
-    const term_k = omega_k * Math.pow(1 + z, 2);
-    return H0 * Math.sqrt(term_m + term_lambda + term_k);
-  };
-
-  // 우주 나이 계산 (적분으로 근사)
-  const ageOfUniverse = () => {
-    const dz = 0.01;
-    let integral = 0;
-    for (let z = 0; z < 1000; z += dz) {
-      integral += dz / (hubbleFunction(z) * (1 + z));
-    }
-    const age_Gyr = (integral * Mpc_to_m / (1e9 * 365.25 * 24 * 3600 * c)) / 1e9;
-    return age_Gyr;
-  };
-
-  // 스케일 팩터 진화: a(z) = 1/(1+z)
-  const generateHubbleData = () => {
-    const data = [];
-    for (let z = 0; z <= 10; z += 0.2) {
-      data.push({
-        z: parseFloat(z.toFixed(1)),
-        H_z: parseFloat(hubbleFunction(z).toFixed(2)),
-        a: parseFloat((1 / (1 + z)).toFixed(3))
-      });
-    }
-    return data;
-  };
-
-  // 밀도 파라미터 계산
-  const densityParameters = () => {
-    const omega_k = Math.max(0, 1 - omega_m - omega_lambda);
-    return {
-      matter: parseFloat((omega_m * 100).toFixed(2)),
-      dark_energy: parseFloat((omega_lambda * 100).toFixed(2)),
-      radiation: parseFloat(((1 - omega_m - omega_lambda) * 100).toFixed(2)),
-      total: parseFloat((omega_m + omega_lambda + omega_k).toFixed(3))
-    };
-  };
-
-  // 계산 실행
-  const handleSimulate = () => {
-    const age = ageOfUniverse();
-    const h_data = generateHubbleData();
-    const density = densityParameters();
+  // 캔버스 드로잉 유틸
+  const drawInflation = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
     
-    setResults({
-      age,
-      H0: parseFloat(H0.toFixed(2)),
-      density,
-      omega_k: Math.max(0, 1 - omega_m - omega_lambda)
-    });
-    setHubbleData(h_data);
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 우주 인플레이션 시각화
+    const scale = 0.2 + t * 2; // 시간에 따라 확대
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // 배경 그리드
+    ctx.strokeStyle = isDark ? '#333' : '#ddd';
+    ctx.lineWidth = 1;
+    for (let i = -5; i < 6; i++) {
+      const x = centerX + i * 50 * scale;
+      const y1 = centerY - 250 * scale;
+      const y2 = centerY + 250 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x, y1);
+      ctx.lineTo(x, y2);
+      ctx.stroke();
+
+      const y = centerY + i * 50 * scale;
+      const x1 = centerX - 250 * scale;
+      const x2 = centerX + 250 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x1, y);
+      ctx.lineTo(x2, y);
+      ctx.stroke();
+    }
+
+    // 양자 요동 (fluctuations)
+    ctx.fillStyle = `rgba(100, 200, 255, ${0.3 + 0.2 * Math.sin(t * 5)})`;
+    for (let i = 0; i < 30; i++) {
+      const angle = (i / 30) * Math.PI * 2 + t;
+      const r = 80 * scale + Math.sin(t * 3 + i) * 20;
+      const x = centerX + Math.cos(angle) * r;
+      const y = centerY + Math.sin(angle) * r;
+      const size = 3 + Math.sin(t * 2 + i) * 2;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 중심 특이점
+    const coreSize = 5 + t * 10;
+    ctx.fillStyle = `rgba(255, 100, 100, ${1 - t})`;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, coreSize, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 팽창 파동
+    ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - t * 0.3})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const radius = (50 + i * 40) * scale;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   };
+
+  const drawBlackHoleAccretion = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 별자리 배경
+    ctx.fillStyle = isDark ? '#fff' : '#000';
+    for (let i = 0; i < 100; i++) {
+      const x = (Math.sin(i * 12.9898) * 43758.5453) % width;
+      const y = (Math.sin(i * 78.233) * 43758.5453) % height;
+      ctx.fillRect(x, y, 1, 1);
+    }
+
+    // 강착 원판 (Accretion disk)
+    for (let ring = 0; ring < 8; ring++) {
+      const radius = 50 + ring * 15;
+      const opacity = 0.1 + ring * 0.08;
+      const hue = 50 + ring * 20 + t * 50;
+      
+      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${opacity})`;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 회전 입자
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2 + t * (3 - ring * 0.3);
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius + Math.sin(t * 2 + i) * 3;
+        ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.8)`;
+        ctx.fillRect(x - 2, y - 1, 4, 2);
+      }
+    }
+
+    // 블랙홀 (event horizon)
+    const bhRadius = 15;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, bhRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 광환 (photon ring)
+    ctx.strokeStyle = `rgba(255, 150, 0, ${0.6 + 0.2 * Math.sin(t * 3)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, bhRadius * 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 상대론적 제트 (relativistic jet)
+    ctx.strokeStyle = 'rgba(100, 200, 255, 0.7)';
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 3; i++) {
+      const offset = i * 40 - 40;
+      ctx.beginPath();
+      ctx.moveTo(centerX + offset, centerY - bhRadius - 20);
+      ctx.lineTo(centerX + offset - 15 * Math.sin(t * 2), centerY - bhRadius - 100);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(centerX + offset, centerY + bhRadius + 20);
+      ctx.lineTo(centerX + offset + 15 * Math.sin(t * 2), centerY + bhRadius + 100);
+      ctx.stroke();
+    }
+  };
+
+  const drawGalaxyMerger = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 갤럭시 1 (좌측)
+    const g1X = width / 2 - 80 + t * 60;
+    const g1Y = height / 2;
+    drawGalaxySpiral(ctx, g1X, g1Y, 40, t * 0.5);
+
+    // 갤럭시 2 (우측)
+    const g2X = width / 2 + 80 - t * 60;
+    const g2Y = height / 2;
+    drawGalaxySpiral(ctx, g2X, g2Y, 40, -t * 0.6);
+
+    // 중력상호작용 (조석 뻗음)
+    ctx.strokeStyle = `rgba(100, 150, 255, ${0.2 + 0.1 * Math.sin(t * 5)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(g1X + 40, g1Y);
+    ctx.lineTo(g2X - 40, g2Y);
+    ctx.stroke();
+
+    // 진행도 표시
+    if (t > 0.5) {
+      ctx.fillStyle = 'rgba(255, 100, 100, 0.5)';
+      const mergeX = width / 2 + Math.sin(t * 2) * 30;
+      const mergeY = height / 2 + Math.cos(t * 2) * 30;
+      ctx.beginPath();
+      ctx.arc(mergeX, mergeY, 50, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const drawGalaxySpiral = (ctx, x, y, size, rotation) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+
+    // 중심 팽대부
+    ctx.fillStyle = isDark ? 'rgba(255, 200, 100, 0.8)' : 'rgba(255, 180, 50, 0.7)';
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 나선팔
+    for (let arm = 0; arm < 3; arm++) {
+      ctx.strokeStyle = `rgba(${100 + arm * 50}, ${150 + arm * 30}, 255, 0.6)`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      
+      const armAngle = (arm / 3) * Math.PI * 2;
+      for (let i = 0; i < 20; i++) {
+        const angle = armAngle + (i / 20) * Math.PI * 3;
+        const r = (i / 20) * size;
+        const px = Math.cos(angle) * r;
+        const py = Math.sin(angle) * r;
+        
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  };
+
+  const drawNeutronStarCollision = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    const progress = t % 1;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    if (progress < 0.5) {
+      // 접근 단계
+      const dist = 150 * (1 - progress * 2);
+      
+      // 중성자별 1
+      ctx.fillStyle = `rgba(100, 150, 255, 0.9)`;
+      ctx.beginPath();
+      ctx.arc(centerX - dist, centerY, 15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 중성자별 2
+      ctx.fillStyle = `rgba(255, 100, 100, 0.9)`;
+      ctx.beginPath();
+      ctx.arc(centerX + dist, centerY, 15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 중력파 (ripple)
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - progress})`;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const r = (50 + i * 40) * (1 - progress);
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else {
+      // 병합 단계
+      const mergeProgress = (progress - 0.5) * 2;
+      ctx.fillStyle = `rgba(255, 150, 0, ${1 - mergeProgress})`;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 20 * mergeProgress, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 강력한 중력파
+      ctx.strokeStyle = `rgba(100, 200, 255, ${0.8 - mergeProgress * 0.5})`;
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        const r = 50 + i * 30 + mergeProgress * 100;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 킬로노바 (kilonova) 폭발
+      for (let i = 0; i < 20; i++) {
+        const angle = (i / 20) * Math.PI * 2;
+        const distance = 100 * mergeProgress;
+        const x = centerX + Math.cos(angle) * distance;
+        const y = centerY + Math.sin(angle) * distance;
+        ctx.fillStyle = `rgba(255, ${200 - mergeProgress * 100}, 0, ${1 - mergeProgress})`;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  const drawSupernovaExplosion = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    const explosionT = t % 1;
+
+    // 폭발 파동
+    ctx.strokeStyle = `rgba(255, 100, 50, ${0.8 - explosionT * 0.8})`;
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 5; i++) {
+      const r = 30 + explosionT * 150 + i * 15;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 방사성 물질 분출
+    for (let i = 0; i < 40; i++) {
+      const angle = (i / 40) * Math.PI * 2;
+      const distance = 40 + explosionT * 120;
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      const hue = 30 + Math.random() * 30;
+      const opacity = 1 - explosionT;
+      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${opacity * 0.7})`;
+      
+      const size = 2 + Math.random() * 4;
+      ctx.fillRect(x - size / 2, y - size / 2, size, size);
+    }
+
+    // 중심 핵
+    ctx.fillStyle = `rgba(255, 200, 0, ${1 - explosionT * 0.5})`;
+    const coreSize = 20 - explosionT * 15;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, Math.max(coreSize, 5), 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  const drawCosmicWebStructure = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 암흑물질 필라멘트와 보이드 시뮬레이션
+    const scale = 2 + t * 0.5;
+
+    for (let i = 0; i < 50; i++) {
+      const x1 = (Math.sin(i * 12.9898 + t) * 0.5 + 0.5) * width;
+      const y1 = (Math.sin(i * 78.233 + t * 0.7) * 0.5 + 0.5) * height;
+      
+      // 갤럭시 클러스터
+      ctx.fillStyle = `hsla(${i * 7}, 100%, 60%, 0.8)`;
+      const clusterSize = 3 + Math.sin(t + i) * 2;
+      ctx.beginPath();
+      ctx.arc(x1, y1, clusterSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 필라멘트 연결
+      if (i < 25) {
+        const x2 = (Math.sin((i + 1) * 12.9898 + t) * 0.5 + 0.5) * width;
+        const y2 = (Math.sin((i + 1) * 78.233 + t * 0.7) * 0.5 + 0.5) * height;
+        
+        ctx.strokeStyle = `rgba(100, 150, 255, ${0.3 + 0.1 * Math.sin(t + i)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+  };
+
+  const drawExoplanetOrbits = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 중심 항성
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 항성 표면 무늬
+    ctx.strokeStyle = 'rgba(255, 150, 0, 0.6)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + t * 0.3;
+      const x1 = centerX + Math.cos(angle) * 18;
+      const y1 = centerY + Math.sin(angle) * 18;
+      const x2 = centerX + Math.cos(angle + 0.3) * 20;
+      const y2 = centerY + Math.sin(angle + 0.3) * 20;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    // 행성 궤도
+    const planets = [
+      { radius: 80, period: 2, size: 4, color: 'rgba(100, 150, 255, 0.8)' },
+      { radius: 120, period: 4, size: 6, color: 'rgba(255, 100, 100, 0.8)' },
+      { radius: 150, period: 6, size: 5, color: 'rgba(100, 200, 100, 0.8)' },
+      { radius: 180, period: 8, size: 4, color: 'rgba(255, 200, 100, 0.8)' }
+    ];
+
+    planets.forEach((planet) => {
+      // 궤도선
+      ctx.strokeStyle = `${planet.color.slice(0, -3)}, 0.3)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, planet.radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 행성
+      const angle = (t / planet.period) * Math.PI * 2;
+      const x = centerX + Math.cos(angle) * planet.radius;
+      const y = centerY + Math.sin(angle) * planet.radius;
+      
+      ctx.fillStyle = planet.color;
+      ctx.beginPath();
+      ctx.arc(x, y, planet.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 행성 축
+      ctx.strokeStyle = planet.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle + Math.PI / 4) * 3, y + Math.sin(angle + Math.PI / 4) * 3);
+      ctx.stroke();
+    });
+  };
+
+  const drawPulsarRotation = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 펄서 자기장
+    ctx.strokeStyle = `rgba(100, 150, 255, ${0.2 + 0.1 * Math.sin(t * 10)})`;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      const r = 40 + i * 20;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 펄서 회전
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(t * 8);
+
+    // 펄서 물질
+    ctx.fillStyle = 'rgba(200, 100, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 방출 빔
+    ctx.fillStyle = `rgba(100, 200, 255, ${0.5 + 0.3 * Math.sin(t * 10)})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(30, 15);
+    ctx.lineTo(80, 5);
+    ctx.lineTo(50, -5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(30, -15);
+    ctx.lineTo(80, -5);
+    ctx.lineTo(50, 5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // 신호 강도 표시 (신호음파)
+    ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - (t % 0.2) * 2.5})`;
+    ctx.lineWidth = 2;
+    const signalR = 100 + (t % 0.2) * 100;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, signalR, 0, Math.PI * 2);
+    ctx.stroke();
+  };
+
+  const drawMagnetar = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 극강 자기장 선
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const startR = 30;
+      const endR = 120;
+
+      ctx.strokeStyle = `rgba(255, ${100 + i * 15}, 100, ${0.3 + 0.2 * Math.sin(t * 3 + i)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      for (let j = 0; j < 50; j++) {
+        const r = startR + (endR - startR) * (j / 50);
+        const curve = Math.sin(angle * 2 + j * 0.1) * 10;
+        const x = centerX + Math.cos(angle) * r + curve;
+        const y = centerY + Math.sin(angle) * r;
+
+        if (j === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // 중성자별 표면
+    ctx.fillStyle = 'rgba(150, 100, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 플레어 폭발
+    if (Math.sin(t * 5) > 0.5) {
+      for (let i = 0; i < 15; i++) {
+        const angle = (i / 15) * Math.PI * 2 + Math.random() * 0.5;
+        const distance = 50 + Math.random() * 80;
+        const x = centerX + Math.cos(angle) * distance;
+        const y = centerY + Math.sin(angle) * distance;
+
+        ctx.fillStyle = `rgba(255, ${150 + Math.random() * 100}, 0, ${0.7 + Math.random() * 0.3})`;
+        const size = 2 + Math.random() * 6;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  const drawQuasarJet = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 배경 성단
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.1)';
+    for (let i = 0; i < 50; i++) {
+      const x = Math.sin(i * 12.9898) * width * 0.4 + width / 2;
+      const y = Math.sin(i * 78.233) * height * 0.4 + height / 2;
+      const size = 0.5 + Math.sin(t + i) * 0.5;
+      ctx.fillRect(x, y, size, size);
+    }
+
+    // 쿠에이사 (활동은하핵)
+    ctx.fillStyle = 'rgba(255, 100, 50, 0.9)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 제트 분사
+    const jetLength = 150;
+    const jetAngle1 = t * 0.5;
+    const jetAngle2 = jetAngle1 + Math.PI;
+
+    for (let i = 0; i < 2; i++) {
+      const angle = i === 0 ? jetAngle1 : jetAngle2;
+      
+      // 제트 기본 구조
+      ctx.strokeStyle = `rgba(100, 150, 255, 0.8)`;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(centerX + Math.cos(angle) * 15, centerY + Math.sin(angle) * 15);
+      ctx.lineTo(
+        centerX + Math.cos(angle) * (15 + jetLength),
+        centerY + Math.sin(angle) * (15 + jetLength)
+      );
+      ctx.stroke();
+
+      // 플라즈마 흐름
+      for (let j = 0; j < 20; j++) {
+        const dist = 20 + (t * 100 + j * 10) % jetLength;
+        const x = centerX + Math.cos(angle) * dist;
+        const y = centerY + Math.sin(angle) * dist;
+
+        ctx.fillStyle = `hsla(200, 100%, ${50 + j * 2}%, ${1 - dist / jetLength})`;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  const drawWormhole = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 배경 별
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.2)';
+    for (let i = 0; i < 80; i++) {
+      const x = Math.sin(i * 12.9898 + t * 0.2) * width * 0.45 + width / 2;
+      const y = Math.sin(i * 78.233 + t * 0.2) * height * 0.45 + height / 2;
+      const size = Math.sin(t * 2 + i) * 0.5 + 0.5;
+      ctx.fillRect(x, y, size, size);
+    }
+
+    // 웜홀 구조
+    for (let ring = 0; ring < 20; ring++) {
+      const ringT = (ring / 20 + t * 0.5) % 1;
+      const radius = 30 + ring * 5;
+      const opacity = Math.sin(ringT * Math.PI) * 0.8;
+
+      ctx.strokeStyle = `hsla(${280 + ring * 5}, 100%, ${50 + ring * 2}%, ${opacity})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 중심 특이점
+    ctx.fillStyle = `rgba(100, 50, 200, ${0.5 + 0.3 * Math.sin(t * 5)})`;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 스파게티화 효과
+    ctx.strokeStyle = `rgba(255, 100, 100, ${0.5 - (t % 0.5) * 1})`;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const stretch = 50 + (t % 0.5) * 100;
+      ctx.beginPath();
+      ctx.moveTo(centerX - 30 + i * 15, centerY - stretch);
+      ctx.lineTo(centerX - 30 + i * 15, centerY + stretch);
+      ctx.stroke();
+    }
+  };
+
+  const drawVolumetricClouds = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 분자운 입자 시뮬레이션
+    for (let i = 0; i < 200; i++) {
+      const x = (Math.sin(i * 12.9898 + t) * 0.5 + 0.5) * width;
+      const y = (Math.sin(i * 78.233 + t * 0.8) * 0.5 + 0.5) * height;
+      
+      const density = Math.sin(x * 0.01 + t) * Math.sin(y * 0.01 + t * 0.7);
+      const hue = 200 + density * 60;
+      const opacity = Math.max(0, density) * 0.8;
+
+      ctx.fillStyle = `hsla(${hue}, 80%, 50%, ${opacity})`;
+      const size = 1 + Math.sin(t * 2 + i) * 0.5;
+      ctx.fillRect(x - size / 2, y - size / 2, size, size);
+    }
+
+    // 별 형성 영역
+    ctx.fillStyle = `rgba(255, 150, 0, ${0.4 + 0.2 * Math.sin(t * 3)})`;
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + t * 0.3;
+      const r = 100;
+      const x = width / 2 + Math.cos(angle) * r;
+      const y = height / 2 + Math.sin(angle) * r;
+      ctx.beginPath();
+      ctx.arc(x, y, 5 + Math.sin(t * 2 + i) * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const drawCoronalMassEjection = (ctx, t) => {
+    const width = ctx.canvas.width;
+    const height = ctx.canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.fillStyle = isDark ? '#111' : '#fff';
+    ctx.fillRect(0, 0, width, height);
+
+    // 태양 표면
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 태양 자기장 루프
+    ctx.strokeStyle = `rgba(255, 100, 100, ${0.4 + 0.2 * Math.sin(t * 4)})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const baseX = centerX - 40 + i * 40;
+      ctx.beginPath();
+      ctx.arc(baseX, centerY - 40, 20 + i * 10, 0, Math.PI);
+      ctx.stroke();
+    }
+
+    // CME 분출 (조건부)
+    const ejectPhase = (t * 2) % 3;
+    if (ejectPhase > 1) {
+      const ejectProgress = (ejectPhase - 1) / 1;
+      
+      // 플라즈마 구름
+      ctx.fillStyle = `rgba(100, 150, 255, ${0.8 - ejectProgress * 0.8})`;
+      ctx.beginPath();
+      const radius = 40 + ejectProgress * 100;
+      ctx.arc(centerX, centerY - 30, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 분출 입자
+      for (let i = 0; i < 30; i++) {
+        const angle = (i / 30) * Math.PI * 2;
+        const distance = 50 + ejectProgress * 120;
+        const x = centerX + Math.cos(angle) * distance;
+        const y = centerY - 30 + Math.sin(angle) * distance;
+
+        ctx.fillStyle = `rgba(255, 150, 100, ${1 - ejectProgress})`;
+        const size = 2 + Math.random() * 2;
+        ctx.fillRect(x - size / 2, y - size / 2, size, size);
+      }
+    }
+  };
+
+  const visualizations = [
+    { id: 'inflation', name: '🌌 인플레이션', fn: drawInflation },
+    { id: 'bh-accretion', name: '⚫ 블랙홀', fn: drawBlackHoleAccretion },
+    { id: 'galaxy-merger', name: '🌀 은하 병합', fn: drawGalaxyMerger },
+    { id: 'ns-collision', name: '💥 중성자별 충돌', fn: drawNeutronStarCollision },
+    { id: 'supernova', name: '✨ 초신성', fn: drawSupernovaExplosion },
+    { id: 'cosmic-web', name: '🕸️ 우주 거미줄', fn: drawCosmicWebStructure },
+    { id: 'exoplanet', name: '🪐 외계행성', fn: drawExoplanetOrbits },
+    { id: 'pulsar', name: '📡 펄서', fn: drawPulsarRotation },
+    { id: 'magnetar', name: '🧲 자기별', fn: drawMagnetar },
+    { id: 'quasar', name: '☄️ 쿠에이사', fn: drawQuasarJet },
+    { id: 'wormhole', name: '🌀 웜홀', fn: drawWormhole },
+    { id: 'clouds', name: '☁️ 분자운', fn: drawVolumetricClouds },
+    { id: 'cme', name: '🔥 코로나 방출', fn: drawCoronalMassEjection }
+  ];
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let currentTime = 0;
+
+    const animate = () => {
+      const viz = visualizations.find(v => v.id === activeViz);
+      if (viz) {
+        const displayTime = autoPlay ? currentTime : timeSlider;
+        viz.fn(ctx, displayTime);
+      }
+
+      if (autoPlay) {
+        currentTime += 0.01 * speed;
+      }
+
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => cancelAnimationFrame(animationId);
+  }, [activeViz, timeSlider, autoPlay, speed, isDark]);
 
   const containerClass = isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* 헤더 */}
       <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-500 to-blue-500 dark:from-indigo-300 dark:to-blue-300 bg-clip-text text-transparent">
-          🌌 우주론 시뮬레이터
+        <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-blue-500 dark:from-purple-300 dark:to-blue-300 bg-clip-text text-transparent">
+          🔭 천체물리 시뮬레이션
         </h1>
         <p className={`text-sm sm:text-base ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-          우주 파라미터를 조정하고 허블함수, 우주 나이, 밀도 진화를 실시간으로 계산합니다.
+          13가지 우주 현상을 시간에 따라 변하는 3D 시각화로 탐색합니다
         </p>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 입력 패널 */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-          <h2 className="text-2xl font-bold mb-6">파라미터 설정</h2>
-          
-          <div className="space-y-5">
-            {/* Omega_m */}
-            <div>
-              <label className={`block text-sm font-semibold mb-2`}>
-                물질 밀도 파라미터 (Ω_m) = {omega_m.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={omega_m}
-                onChange={(e) => setOmega_m(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                우주의 암흑물질 + 통상물질 비율
-              </p>
-            </div>
+      {/* 시뮬레이션 캔버스 */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className={`p-6 rounded-3xl border shadow-lg ${containerClass}`}
+      >
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={500}
+          className={`w-full border rounded-2xl ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+        />
+      </motion.div>
 
-            {/* Omega_lambda */}
-            <div>
-              <label className={`block text-sm font-semibold mb-2`}>
-                암흑에너지 밀도 파라미터 (Ω_Λ) = {omega_lambda.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={omega_lambda}
-                onChange={(e) => setOmega_lambda(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                우주 가속 팽창을 일으키는 에너지
-              </p>
-            </div>
+      {/* 제어판 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}
+      >
+        <h2 className="text-2xl font-bold mb-6">⚙️ 제어 및 설정</h2>
 
-            {/* h (허블상수) */}
-            <div>
-              <label className={`block text-sm font-semibold mb-2`}>
-                허블상수 스케일 (h) = {h.toFixed(2)} → H₀ = {H0.toFixed(1)} km/s/Mpc
-              </label>
-              <input
-                type="range"
-                min="0.5"
-                max="0.9"
-                step="0.01"
-                value={h}
-                onChange={(e) => setH(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                우주 팽창 속도
-              </p>
-            </div>
+        {/* 시뮬레이션 선택 */}
+        <div className="mb-6">
+          <p className="font-semibold mb-3">시뮬레이션 선택:</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {visualizations.map(viz => (
+              <button
+                key={viz.id}
+                onClick={() => setActiveViz(viz.id)}
+                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  activeViz === viz.id
+                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
+                    : isDark
+                    ? 'bg-gray-700 hover:bg-gray-600'
+                    : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                {viz.name}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            {/* w (암흑에너지 상태방정식) */}
-            <div>
-              <label className={`block text-sm font-semibold mb-2`}>
-                암흑에너지 상태방정식 (w) = {w.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="-2"
-                max="-0.3"
-                step="0.1"
-                value={w}
-                onChange={(e) => setW(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                w = -1 (우주상수), w &lt; -1 (phantom)
-              </p>
-            </div>
+        {/* 시간 제어 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2">
+            <label className="block text-sm font-semibold mb-3">시간 진행 ({(timeSlider * 100).toFixed(0)}%)</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={timeSlider}
+              onChange={(e) => {
+                setTimeSlider(parseFloat(e.target.value));
+                setAutoPlay(false);
+              }}
+              className="w-full"
+            />
+          </div>
 
-            {/* 계산 버튼 */}
-            <button
-              onClick={handleSimulate}
-              className="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white font-bold rounded-xl mt-6"
+          <div>
+            <label className="block text-sm font-semibold mb-3">재생 속도</label>
+            <select
+              value={speed}
+              onChange={(e) => setSpeed(parseFloat(e.target.value))}
+              className={`w-full px-3 py-2 rounded-lg border ${
+                isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
+              }`}
             >
-              🚀 시뮬레이션 실행
-            </button>
+              <option value={0.5}>0.5x</option>
+              <option value={1}>1x</option>
+              <option value={2}>2x</option>
+              <option value={3}>3x</option>
+            </select>
           </div>
+        </div>
 
-          {/* 초기 조건 */}
-          <div className={`mt-8 p-4 rounded-2xl border ${isDark ? 'bg-gray-800/50 border-gray-700' : 'bg-blue-50 border-blue-200'}`}>
-            <p className={`text-xs font-semibold mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-              ΛCDM 기준값 설정
-            </p>
-            <div className="space-y-2">
-              <button
-                onClick={() => { setOmega_m(0.3); setOmega_lambda(0.7); setH(0.7); setW(-1); }}
-                className={`w-full py-2 px-3 rounded-lg text-sm font-medium ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-100'}`}
-              >
-                ΛCDM 표준모형
-              </button>
-              <button
-                onClick={() => { setOmega_m(0.1); setOmega_lambda(0.9); setH(0.68); setW(-1); }}
-                className={`w-full py-2 px-3 rounded-lg text-sm font-medium ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-100'}`}
-              >
-                어두운 에너지 지배
-              </button>
-              <button
-                onClick={() => { setOmega_m(0.5); setOmega_lambda(0.5); setH(0.7); setW(-1); }}
-                className={`w-full py-2 px-3 rounded-lg text-sm font-medium ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-100'}`}
-              >
-                평탄 우주 (5050)
-              </button>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* 결과 패널 */}
-        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-          <h2 className="text-2xl font-bold mb-6">계산 결과</h2>
-
-          {results ? (
-            <div className="space-y-6">
-              {/* 주요 결과값 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-gray-800/30 border-gray-700' : 'bg-indigo-50 border-indigo-200'}`}>
-                  <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-                    우주 나이
-                  </p>
-                  <p className="text-2xl font-bold mt-2">{results.age.toFixed(2)} Gyr</p>
-                </div>
-                <div className={`p-4 rounded-2xl border ${isDark ? 'bg-gray-800/30 border-gray-700' : 'bg-blue-50 border-blue-200'}`}>
-                  <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>
-                    허블 상수
-                  </p>
-                  <p className="text-2xl font-bold mt-2">H₀ = {results.H0} km/s/Mpc</p>
-                </div>
-              </div>
-
-              {/* 밀도 파라미터 */}
-              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-gray-800/30 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                <p className="font-semibold mb-3">밀도 파라미터</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>물질 (Ω_m)</span>
-                    <span className="font-mono font-bold">{results.density.matter}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>암흑에너지 (Ω_Λ)</span>
-                    <span className="font-mono font-bold">{results.density.dark_energy}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>곡률 (Ω_k)</span>
-                    <span className="font-mono font-bold">{(results.density.radiation).toFixed(2)}%</span>
-                  </div>
-                  <div className="border-t border-gray-300 dark:border-gray-600 pt-2 flex justify-between font-semibold">
-                    <span>합계</span>
-                    <span className="font-mono">{results.density.total}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 우주론 파라미터 */}
-              <div className={`p-4 rounded-2xl border ${isDark ? 'bg-gray-800/30 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
-                <p className="font-semibold mb-3">현재 우주 상태</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>스케일 팩터 (a)</span>
-                    <span className="font-mono font-bold">1.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>적색이동 (z)</span>
-                    <span className="font-mono font-bold">0.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>암흑에너지 방정식 (w)</span>
-                    <span className="font-mono font-bold">{w}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              <p>좌측 패널에서 파라미터를 설정하고</p>
-              <p>🚀 시뮬레이션 실행 버튼을 클릭하세요</p>
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* 허블함수 그래프 */}
-      {hubbleData.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-          <h2 className="text-2xl font-bold mb-6">허블 함수 진화 H(z)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={hubbleData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#444' : '#ddd'} />
-              <XAxis 
-                dataKey="z" 
-                label={{ value: '적색이동 (z)', position: 'insideBottomRight', offset: -5 }}
-                stroke={isDark ? '#666' : '#999'}
-              />
-              <YAxis 
-                label={{ value: 'H(z) [km/s/Mpc]', angle: -90, position: 'insideLeft' }}
-                stroke={isDark ? '#666' : '#999'}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: isDark ? '#1f2937' : '#fff',
-                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
-                  color: isDark ? '#fff' : '#000'
-                }}
-              />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="H_z" 
-                stroke="#3b82f6" 
-                name="H(z)"
-                dot={false}
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <p className={`text-xs mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            📊 과거 우주의 팽창 속도: 적색이동이 클수록 과거를 나타냅니다
-          </p>
-        </motion.div>
-      )}
-
-      {/* 스케일 팩터 진화 */}
-      {hubbleData.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-          <h2 className="text-2xl font-bold mb-6">스케일 팩터 진화 a(z)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={hubbleData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#444' : '#ddd'} />
-              <XAxis 
-                dataKey="z" 
-                label={{ value: '적색이동 (z)', position: 'insideBottomRight', offset: -5 }}
-                stroke={isDark ? '#666' : '#999'}
-              />
-              <YAxis 
-                label={{ value: '스케일 팩터 a(z)', angle: -90, position: 'insideLeft' }}
-                stroke={isDark ? '#666' : '#999'}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: isDark ? '#1f2937' : '#fff',
-                  border: `1px solid ${isDark ? '#444' : '#ddd'}`,
-                  color: isDark ? '#fff' : '#000'
-                }}
-              />
-              <Legend />
-              <Bar 
-                dataKey="a" 
-                fill="#8b5cf6"
-                name="a(z) = 1/(1+z)"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className={`text-xs mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            📈 우주 크기의 시간 진화: a=1은 현재, a&lt;1은 과거 우주의 더 작은 상태
-          </p>
-        </motion.div>
-      )}
+        {/* 재생 버튼 */}
+        <button
+          onClick={() => setAutoPlay(!autoPlay)}
+          className={`w-full py-3 px-4 rounded-xl font-bold transition-all ${
+            autoPlay
+              ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+              : 'bg-gradient-to-r from-green-500 to-blue-500 text-white'
+          }`}
+        >
+          {autoPlay ? '⏸️ 일시 정지' : '▶️ 재생'}
+        </button>
+      </motion.div>
 
       {/* 정보 섹션 */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.2 }} className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}>
-        <h2 className="text-2xl font-bold mb-4">🔬 우주론 배경</h2>
-        <div className={`space-y-3 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}
+      >
+        <h2 className="text-2xl font-bold mb-4">📚 현재 선택: {visualizations.find(v => v.id === activeViz)?.name}</h2>
+        <div className={`space-y-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
           <p>
-            <strong>Ω_m (물질 밀도 파라미터)</strong>: 우주 전체 에너지 밀도에서 차지하는 물질(암흑물질 포함)의 비율
+            <strong>팁:</strong> 각 시뮬레이션은 우주의 다양한 극한 현상을 보여줍니다.
           </p>
           <p>
-            <strong>Ω_Λ (암흑에너지 파라미터)</strong>: 우주 가속 팽창을 일으키는 에너지의 비율 (우주상수 모형)
+            시간 슬라이더를 드래그하거나 재생 버튼으로 자동 진행을 제어할 수 있습니다.
           </p>
           <p>
-            <strong>h (허블 파라미터)</strong>: 현재 우주 팽창 속도를 나타내는 무차원 수. H₀ = 100h km/s/Mpc
-          </p>
-          <p>
-            <strong>w (암흑에너지 상태방정식)</strong>: w = -1이면 우주상수, w &lt; -1이면 phantom 에너지 (우주 팽창 가속화)
-          </p>
-          <p>
-            <strong>허블 함수 H(z)</strong>: 적색이동이 z인 거리에서의 팽창 속도. 과거 우주의 상태를 나타냅니다
+            실제 물리를 기반으로 한 근사 시뮬레이션이며, 교육 목적으로 단순화되었습니다.
           </p>
         </div>
       </motion.div>
