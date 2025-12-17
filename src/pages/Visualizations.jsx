@@ -1,779 +1,866 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
+import * as THREE from 'three';
 
 export default function Visualizations() {
   const { isDark } = useTheme();
-  const [activeViz, setActiveViz] = useState('inflation');
-  const [timeSlider, setTimeSlider] = useState(0.5);
+  const [activeViz, setActiveViz] = useState('neutron-collision');
+  const [timeSlider, setTimeSlider] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [autoPlay, setAutoPlay] = useState(true);
+  const [rotationMode, setRotationMode] = useState(true);
 
-  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const sceneRef = useRef(null);
+  const rendererRef = useRef(null);
+  const animationIdRef = useRef(null);
+  const timeRef = useRef(0);
 
-  // 캔버스 드로잉 유틸
-  const drawInflation = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
+  // 고급 입자 시스템
+  class ParticleSystem {
+    constructor(count) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const velocities = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 2;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 2;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+        
+        velocities[i * 3] = (Math.random() - 0.5) * 0.02;
+        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+        
+        colors[i * 3] = Math.random();
+        colors[i * 3 + 1] = Math.random();
+        colors[i * 3 + 2] = Math.random();
+      }
+      
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      const material = new THREE.PointsMaterial({
+        size: 0.02,
+        vertexColors: true,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.8
+      });
+      
+      this.mesh = new THREE.Points(geometry, material);
+      this.velocities = velocities;
+      this.positionAttribute = geometry.getAttribute('position');
+      this.colorAttribute = geometry.getAttribute('color');
+    }
     
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 우주 인플레이션 시각화
-    const scale = 0.2 + t * 2; // 시간에 따라 확대
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    // 배경 그리드
-    ctx.strokeStyle = isDark ? '#333' : '#ddd';
-    ctx.lineWidth = 1;
-    for (let i = -5; i < 6; i++) {
-      const x = centerX + i * 50 * scale;
-      const y1 = centerY - 250 * scale;
-      const y2 = centerY + 250 * scale;
-      ctx.beginPath();
-      ctx.moveTo(x, y1);
-      ctx.lineTo(x, y2);
-      ctx.stroke();
-
-      const y = centerY + i * 50 * scale;
-      const x1 = centerX - 250 * scale;
-      const x2 = centerX + 250 * scale;
-      ctx.beginPath();
-      ctx.moveTo(x1, y);
-      ctx.lineTo(x2, y);
-      ctx.stroke();
-    }
-
-    // 양자 요동 (fluctuations)
-    ctx.fillStyle = `rgba(100, 200, 255, ${0.3 + 0.2 * Math.sin(t * 5)})`;
-    for (let i = 0; i < 30; i++) {
-      const angle = (i / 30) * Math.PI * 2 + t;
-      const r = 80 * scale + Math.sin(t * 3 + i) * 20;
-      const x = centerX + Math.cos(angle) * r;
-      const y = centerY + Math.sin(angle) * r;
-      const size = 3 + Math.sin(t * 2 + i) * 2;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 중심 특이점
-    const coreSize = 5 + t * 10;
-    ctx.fillStyle = `rgba(255, 100, 100, ${1 - t})`;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, coreSize, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 팽창 파동
-    ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - t * 0.3})`;
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) {
-      const radius = (50 + i * 40) * scale;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  };
-
-  const drawBlackHoleAccretion = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 별자리 배경
-    ctx.fillStyle = isDark ? '#fff' : '#000';
-    for (let i = 0; i < 100; i++) {
-      const x = (Math.sin(i * 12.9898) * 43758.5453) % width;
-      const y = (Math.sin(i * 78.233) * 43758.5453) % height;
-      ctx.fillRect(x, y, 1, 1);
-    }
-
-    // 강착 원판 (Accretion disk)
-    for (let ring = 0; ring < 8; ring++) {
-      const radius = 50 + ring * 15;
-      const opacity = 0.1 + ring * 0.08;
-      const hue = 50 + ring * 20 + t * 50;
-      
-      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${opacity})`;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 회전 입자
-      for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2 + t * (3 - ring * 0.3);
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius + Math.sin(t * 2 + i) * 3;
-        ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.8)`;
-        ctx.fillRect(x - 2, y - 1, 4, 2);
+    update(callback) {
+      const positions = this.positionAttribute.array;
+      for (let i = 0; i < positions.length; i += 3) {
+        callback(i, positions);
       }
+      this.positionAttribute.needsUpdate = true;
     }
+  }
 
-    // 블랙홀 (event horizon)
-    const bhRadius = 15;
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, bhRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 광환 (photon ring)
-    ctx.strokeStyle = `rgba(255, 150, 0, ${0.6 + 0.2 * Math.sin(t * 3)})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, bhRadius * 1.5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // 상대론적 제트 (relativistic jet)
-    ctx.strokeStyle = 'rgba(100, 200, 255, 0.7)';
-    ctx.lineWidth = 4;
-    for (let i = 0; i < 3; i++) {
-      const offset = i * 40 - 40;
-      ctx.beginPath();
-      ctx.moveTo(centerX + offset, centerY - bhRadius - 20);
-      ctx.lineTo(centerX + offset - 15 * Math.sin(t * 2), centerY - bhRadius - 100);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(centerX + offset, centerY + bhRadius + 20);
-      ctx.lineTo(centerX + offset + 15 * Math.sin(t * 2), centerY + bhRadius + 100);
-      ctx.stroke();
+  // 중성자별 충돌 (킬로노바 + 중력파)
+  const createNeutronCollision = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 별 배경
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(500 * 3);
+    for (let i = 0; i < 500; i++) {
+      starPositions[i * 3] = (Math.random() - 0.5) * 100;
+      starPositions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+      starPositions[i * 3 + 2] = (Math.random() - 0.5) * 100;
     }
-  };
-
-  const drawGalaxyMerger = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 갤럭시 1 (좌측)
-    const g1X = width / 2 - 80 + t * 60;
-    const g1Y = height / 2;
-    drawGalaxySpiral(ctx, g1X, g1Y, 40, t * 0.5);
-
-    // 갤럭시 2 (우측)
-    const g2X = width / 2 + 80 - t * 60;
-    const g2Y = height / 2;
-    drawGalaxySpiral(ctx, g2X, g2Y, 40, -t * 0.6);
-
-    // 중력상호작용 (조석 뻗음)
-    ctx.strokeStyle = `rgba(100, 150, 255, ${0.2 + 0.1 * Math.sin(t * 5)})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(g1X + 40, g1Y);
-    ctx.lineTo(g2X - 40, g2Y);
-    ctx.stroke();
-
-    // 진행도 표시
-    if (t > 0.5) {
-      ctx.fillStyle = 'rgba(255, 100, 100, 0.5)';
-      const mergeX = width / 2 + Math.sin(t * 2) * 30;
-      const mergeY = height / 2 + Math.cos(t * 2) * 30;
-      ctx.beginPath();
-      ctx.arc(mergeX, mergeY, 50, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  };
-
-  const drawGalaxySpiral = (ctx, x, y, size, rotation) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rotation);
-
-    // 중심 팽대부
-    ctx.fillStyle = isDark ? 'rgba(255, 200, 100, 0.8)' : 'rgba(255, 180, 50, 0.7)';
-    ctx.beginPath();
-    ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 나선팔
-    for (let arm = 0; arm < 3; arm++) {
-      ctx.strokeStyle = `rgba(${100 + arm * 50}, ${150 + arm * 30}, 255, 0.6)`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      
-      const armAngle = (arm / 3) * Math.PI * 2;
-      for (let i = 0; i < 20; i++) {
-        const angle = armAngle + (i / 20) * Math.PI * 3;
-        const r = (i / 20) * size;
-        const px = Math.cos(angle) * r;
-        const py = Math.sin(angle) * r;
-        
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  };
-
-  const drawNeutronStarCollision = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    const progress = t % 1;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    if (progress < 0.5) {
-      // 접근 단계
-      const dist = 150 * (1 - progress * 2);
-      
-      // 중성자별 1
-      ctx.fillStyle = `rgba(100, 150, 255, 0.9)`;
-      ctx.beginPath();
-      ctx.arc(centerX - dist, centerY, 15, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 중성자별 2
-      ctx.fillStyle = `rgba(255, 100, 100, 0.9)`;
-      ctx.beginPath();
-      ctx.arc(centerX + dist, centerY, 15, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 중력파 (ripple)
-      ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - progress})`;
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        const r = (50 + i * 40) * (1 - progress);
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    } else {
-      // 병합 단계
-      const mergeProgress = (progress - 0.5) * 2;
-      ctx.fillStyle = `rgba(255, 150, 0, ${1 - mergeProgress})`;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 20 * mergeProgress, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 강력한 중력파
-      ctx.strokeStyle = `rgba(100, 200, 255, ${0.8 - mergeProgress * 0.5})`;
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 5; i++) {
-        const r = 50 + i * 30 + mergeProgress * 100;
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // 킬로노바 (kilonova) 폭발
-      for (let i = 0; i < 20; i++) {
-        const angle = (i / 20) * Math.PI * 2;
-        const distance = 100 * mergeProgress;
-        const x = centerX + Math.cos(angle) * distance;
-        const y = centerY + Math.sin(angle) * distance;
-        ctx.fillStyle = `rgba(255, ${200 - mergeProgress * 100}, 0, ${1 - mergeProgress})`;
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  };
-
-  const drawSupernovaExplosion = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    const explosionT = t % 1;
-
-    // 폭발 파동
-    ctx.strokeStyle = `rgba(255, 100, 50, ${0.8 - explosionT * 0.8})`;
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 5; i++) {
-      const r = 30 + explosionT * 150 + i * 15;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // 방사성 물질 분출
-    for (let i = 0; i < 40; i++) {
-      const angle = (i / 40) * Math.PI * 2;
-      const distance = 40 + explosionT * 120;
-      const x = centerX + Math.cos(angle) * distance;
-      const y = centerY + Math.sin(angle) * distance;
-      
-      const hue = 30 + Math.random() * 30;
-      const opacity = 1 - explosionT;
-      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${opacity * 0.7})`;
-      
-      const size = 2 + Math.random() * 4;
-      ctx.fillRect(x - size / 2, y - size / 2, size, size);
-    }
-
-    // 중심 핵
-    ctx.fillStyle = `rgba(255, 200, 0, ${1 - explosionT * 0.5})`;
-    const coreSize = 20 - explosionT * 15;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, Math.max(coreSize, 5), 0, Math.PI * 2);
-    ctx.fill();
-  };
-
-  const drawCosmicWebStructure = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 암흑물질 필라멘트와 보이드 시뮬레이션
-    const scale = 2 + t * 0.5;
-
-    for (let i = 0; i < 50; i++) {
-      const x1 = (Math.sin(i * 12.9898 + t) * 0.5 + 0.5) * width;
-      const y1 = (Math.sin(i * 78.233 + t * 0.7) * 0.5 + 0.5) * height;
-      
-      // 갤럭시 클러스터
-      ctx.fillStyle = `hsla(${i * 7}, 100%, 60%, 0.8)`;
-      const clusterSize = 3 + Math.sin(t + i) * 2;
-      ctx.beginPath();
-      ctx.arc(x1, y1, clusterSize, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 필라멘트 연결
-      if (i < 25) {
-        const x2 = (Math.sin((i + 1) * 12.9898 + t) * 0.5 + 0.5) * width;
-        const y2 = (Math.sin((i + 1) * 78.233 + t * 0.7) * 0.5 + 0.5) * height;
-        
-        ctx.strokeStyle = `rgba(100, 150, 255, ${0.3 + 0.1 * Math.sin(t + i)})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-    }
-  };
-
-  const drawExoplanetOrbits = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 중심 항성
-    ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 항성 표면 무늬
-    ctx.strokeStyle = 'rgba(255, 150, 0, 0.6)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2 + t * 0.3;
-      const x1 = centerX + Math.cos(angle) * 18;
-      const y1 = centerY + Math.sin(angle) * 18;
-      const x2 = centerX + Math.cos(angle + 0.3) * 20;
-      const y2 = centerY + Math.sin(angle + 0.3) * 20;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-
-    // 행성 궤도
-    const planets = [
-      { radius: 80, period: 2, size: 4, color: 'rgba(100, 150, 255, 0.8)' },
-      { radius: 120, period: 4, size: 6, color: 'rgba(255, 100, 100, 0.8)' },
-      { radius: 150, period: 6, size: 5, color: 'rgba(100, 200, 100, 0.8)' },
-      { radius: 180, period: 8, size: 4, color: 'rgba(255, 200, 100, 0.8)' }
-    ];
-
-    planets.forEach((planet) => {
-      // 궤도선
-      ctx.strokeStyle = `${planet.color.slice(0, -3)}, 0.3)`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, planet.radius, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // 행성
-      const angle = (t / planet.period) * Math.PI * 2;
-      const x = centerX + Math.cos(angle) * planet.radius;
-      const y = centerY + Math.sin(angle) * planet.radius;
-      
-      ctx.fillStyle = planet.color;
-      ctx.beginPath();
-      ctx.arc(x, y, planet.size, 0, Math.PI * 2);
-      ctx.fill();
-
-      // 행성 축
-      ctx.strokeStyle = planet.color;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + Math.cos(angle + Math.PI / 4) * 3, y + Math.sin(angle + Math.PI / 4) * 3);
-      ctx.stroke();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3 });
+    scene.add(new THREE.Points(starGeometry, starMaterial));
+    
+    // 중성자별 1
+    const ns1Geometry = new THREE.SphereGeometry(0.3, 32, 32);
+    const ns1Material = new THREE.MeshPhongMaterial({
+      color: 0x4488ff,
+      emissive: 0x2244ff,
+      shininess: 100,
+      wireframe: false
     });
-  };
-
-  const drawPulsarRotation = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 펄서 자기장
-    ctx.strokeStyle = `rgba(100, 150, 255, ${0.2 + 0.1 * Math.sin(t * 10)})`;
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 6; i++) {
-      const r = 40 + i * 20;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // 펄서 회전
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(t * 8);
-
-    // 펄서 물질
-    ctx.fillStyle = 'rgba(200, 100, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 방출 빔
-    ctx.fillStyle = `rgba(100, 200, 255, ${0.5 + 0.3 * Math.sin(t * 10)})`;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(30, 15);
-    ctx.lineTo(80, 5);
-    ctx.lineTo(50, -5);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(30, -15);
-    ctx.lineTo(80, -5);
-    ctx.lineTo(50, 5);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-
-    // 신호 강도 표시 (신호음파)
-    ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 - (t % 0.2) * 2.5})`;
-    ctx.lineWidth = 2;
-    const signalR = 100 + (t % 0.2) * 100;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, signalR, 0, Math.PI * 2);
-    ctx.stroke();
-  };
-
-  const drawMagnetar = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 극강 자기장 선
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
-      const startR = 30;
-      const endR = 120;
-
-      ctx.strokeStyle = `rgba(255, ${100 + i * 15}, 100, ${0.3 + 0.2 * Math.sin(t * 3 + i)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      for (let j = 0; j < 50; j++) {
-        const r = startR + (endR - startR) * (j / 50);
-        const curve = Math.sin(angle * 2 + j * 0.1) * 10;
-        const x = centerX + Math.cos(angle) * r + curve;
-        const y = centerY + Math.sin(angle) * r;
-
-        if (j === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-
-    // 중성자별 표면
-    ctx.fillStyle = 'rgba(150, 100, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 플레어 폭발
-    if (Math.sin(t * 5) > 0.5) {
-      for (let i = 0; i < 15; i++) {
-        const angle = (i / 15) * Math.PI * 2 + Math.random() * 0.5;
-        const distance = 50 + Math.random() * 80;
-        const x = centerX + Math.cos(angle) * distance;
-        const y = centerY + Math.sin(angle) * distance;
-
-        ctx.fillStyle = `rgba(255, ${150 + Math.random() * 100}, 0, ${0.7 + Math.random() * 0.3})`;
-        const size = 2 + Math.random() * 6;
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  };
-
-  const drawQuasarJet = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 배경 성단
-    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.1)';
-    for (let i = 0; i < 50; i++) {
-      const x = Math.sin(i * 12.9898) * width * 0.4 + width / 2;
-      const y = Math.sin(i * 78.233) * height * 0.4 + height / 2;
-      const size = 0.5 + Math.sin(t + i) * 0.5;
-      ctx.fillRect(x, y, size, size);
-    }
-
-    // 쿠에이사 (활동은하핵)
-    ctx.fillStyle = 'rgba(255, 100, 50, 0.9)';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 제트 분사
-    const jetLength = 150;
-    const jetAngle1 = t * 0.5;
-    const jetAngle2 = jetAngle1 + Math.PI;
-
-    for (let i = 0; i < 2; i++) {
-      const angle = i === 0 ? jetAngle1 : jetAngle2;
-      
-      // 제트 기본 구조
-      ctx.strokeStyle = `rgba(100, 150, 255, 0.8)`;
-      ctx.lineWidth = 8;
-      ctx.beginPath();
-      ctx.moveTo(centerX + Math.cos(angle) * 15, centerY + Math.sin(angle) * 15);
-      ctx.lineTo(
-        centerX + Math.cos(angle) * (15 + jetLength),
-        centerY + Math.sin(angle) * (15 + jetLength)
-      );
-      ctx.stroke();
-
-      // 플라즈마 흐름
-      for (let j = 0; j < 20; j++) {
-        const dist = 20 + (t * 100 + j * 10) % jetLength;
-        const x = centerX + Math.cos(angle) * dist;
-        const y = centerY + Math.sin(angle) * dist;
-
-        ctx.fillStyle = `hsla(200, 100%, ${50 + j * 2}%, ${1 - dist / jetLength})`;
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  };
-
-  const drawWormhole = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 배경 별
-    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.2)';
-    for (let i = 0; i < 80; i++) {
-      const x = Math.sin(i * 12.9898 + t * 0.2) * width * 0.45 + width / 2;
-      const y = Math.sin(i * 78.233 + t * 0.2) * height * 0.45 + height / 2;
-      const size = Math.sin(t * 2 + i) * 0.5 + 0.5;
-      ctx.fillRect(x, y, size, size);
-    }
-
-    // 웜홀 구조
-    for (let ring = 0; ring < 20; ring++) {
-      const ringT = (ring / 20 + t * 0.5) % 1;
-      const radius = 30 + ring * 5;
-      const opacity = Math.sin(ringT * Math.PI) * 0.8;
-
-      ctx.strokeStyle = `hsla(${280 + ring * 5}, 100%, ${50 + ring * 2}%, ${opacity})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // 중심 특이점
-    ctx.fillStyle = `rgba(100, 50, 200, ${0.5 + 0.3 * Math.sin(t * 5)})`;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 10, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 스파게티화 효과
-    ctx.strokeStyle = `rgba(255, 100, 100, ${0.5 - (t % 0.5) * 1})`;
-    ctx.lineWidth = 1;
+    const ns1 = new THREE.Mesh(ns1Geometry, ns1Material);
+    ns1.position.x = -0.8;
+    scene.add(ns1);
+    
+    // 중성자별 2
+    const ns2Geometry = new THREE.SphereGeometry(0.3, 32, 32);
+    const ns2Material = new THREE.MeshPhongMaterial({
+      color: 0xff6644,
+      emissive: 0xff4422,
+      shininess: 100
+    });
+    const ns2 = new THREE.Mesh(ns2Geometry, ns2Material);
+    ns2.position.x = 0.8;
+    scene.add(ns2);
+    
+    // 강착 디스크 (나중 단계)
+    const diskGeometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100);
+    const diskMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff8800,
+      transparent: true,
+      opacity: 0
+    });
+    const disk = new THREE.Mesh(diskGeometry, diskMaterial);
+    disk.rotation.x = Math.PI * 0.3;
+    scene.add(disk);
+    
+    // 킬로노바 입자계
+    const kilonovaSystem = new ParticleSystem(1000);
+    scene.add(kilonovaSystem.mesh);
+    
+    // 중력파 링
+    const gravitationalWaves = [];
     for (let i = 0; i < 5; i++) {
-      const stretch = 50 + (t % 0.5) * 100;
-      ctx.beginPath();
-      ctx.moveTo(centerX - 30 + i * 15, centerY - stretch);
-      ctx.lineTo(centerX - 30 + i * 15, centerY + stretch);
-      ctx.stroke();
+      const ringGeometry = new THREE.TorusGeometry(0.2 + i * 0.3, 0.05, 16, 64);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ccff,
+        transparent: true,
+        opacity: 0
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      gravitationalWaves.push(ring);
+      scene.add(ring);
     }
+    
+    // 조명
+    const light1 = new THREE.PointLight(0x4488ff, 1.5);
+    light1.position.set(-2, 2, 2);
+    scene.add(light1);
+    
+    const light2 = new THREE.PointLight(0xff6644, 1.5);
+    light2.position.set(2, 2, 2);
+    scene.add(light2);
+    
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { ns1, ns2, disk, kilonovaSystem, gravitationalWaves },
+      animate: (t) => {
+        // 접근
+        if (t < 0.5) {
+          ns1.position.x = -0.8 + t * 1.6;
+          ns2.position.x = 0.8 - t * 1.6;
+          ns1.rotation.y += 0.005;
+          ns2.rotation.y -= 0.005;
+        }
+        // 병합
+        else {
+          const mergeT = (t - 0.5) * 2;
+          disk.material.opacity = Math.min(mergeT, 0.7);
+          
+          kilonovaSystem.update((i, pos) => {
+            if (mergeT > 0.2) {
+              const angle = Math.random() * Math.PI * 2;
+              const dist = Math.random() * mergeT * 2;
+              pos[i] = Math.cos(angle) * dist * 0.1;
+              pos[i + 1] = Math.sin(angle) * dist * 0.1;
+              pos[i + 2] = (Math.random() - 0.5) * dist * 0.1;
+            }
+          });
+          
+          gravitationalWaves.forEach((wave, idx) => {
+            wave.material.opacity = Math.max(0, 0.6 - mergeT * 0.5);
+            wave.scale.set(1 + mergeT * 0.5, 1 + mergeT * 0.5, 1);
+          });
+        }
+      }
+    };
   };
 
-  const drawVolumetricClouds = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 분자운 입자 시뮬레이션
-    for (let i = 0; i < 200; i++) {
-      const x = (Math.sin(i * 12.9898 + t) * 0.5 + 0.5) * width;
-      const y = (Math.sin(i * 78.233 + t * 0.8) * 0.5 + 0.5) * height;
-      
-      const density = Math.sin(x * 0.01 + t) * Math.sin(y * 0.01 + t * 0.7);
-      const hue = 200 + density * 60;
-      const opacity = Math.max(0, density) * 0.8;
-
-      ctx.fillStyle = `hsla(${hue}, 80%, 50%, ${opacity})`;
-      const size = 1 + Math.sin(t * 2 + i) * 0.5;
-      ctx.fillRect(x - size / 2, y - size / 2, size, size);
+  // 블랙홀 강착 원판 (현실적)
+  const createBlackHoleAccretion = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x000000 : 0xffffff);
+    
+    // 별 배경
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(300 * 3);
+    for (let i = 0; i < 300; i++) {
+      starPositions[i * 3] = (Math.random() - 0.5) * 80;
+      starPositions[i * 3 + 1] = (Math.random() - 0.5) * 80;
+      starPositions[i * 3 + 2] = (Math.random() - 0.5) * 80;
     }
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xaaaaaa, size: 0.2 });
+    scene.add(new THREE.Points(starGeometry, starMaterial));
+    
+    // 블랙홀 (검은 구)
+    const bhGeometry = new THREE.SphereGeometry(0.3, 64, 64);
+    const bhMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const bh = new THREE.Mesh(bhGeometry, bhMaterial);
+    scene.add(bh);
+    
+    // 포톤 링 (광환)
+    const photonRingGeometry = new THREE.TorusGeometry(0.45, 0.08, 32, 256);
+    const photonRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffaa44,
+      transparent: true,
+      opacity: 0.8
+    });
+    const photonRing = new THREE.Mesh(photonRingGeometry, photonRingMaterial);
+    photonRing.rotation.x = 0.3;
+    scene.add(photonRing);
+    
+    // 강착 디스크 (다층 구조)
+    const accretionDisks = [];
+    for (let ring = 0; ring < 8; ring++) {
+      const ringRadius = 0.5 + ring * 0.25;
+      const ringWidth = 0.15;
+      const diskGeometry = new THREE.TorusGeometry(ringRadius, ringWidth, 16, 256);
+      
+      const hue = 30 + ring * 8;
+      const saturation = 100;
+      const lightness = 40 + ring * 5;
+      const color = new THREE.Color();
+      color.setHSL(hue / 360, saturation / 100, lightness / 100);
+      
+      const diskMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.7 - ring * 0.05
+      });
+      
+      const disk = new THREE.Mesh(diskGeometry, diskMaterial);
+      disk.rotation.x = 0.2;
+      disk.userData.rotationSpeed = 0.02 - ring * 0.002;
+      accretionDisks.push(disk);
+      scene.add(disk);
+    }
+    
+    // 제트 (relativistic jets)
+    const jetGeometry = new THREE.ConeGeometry(0.15, 2, 16);
+    const jetMaterial = new THREE.MeshPhongMaterial({
+      color: 0x00aaff,
+      emissive: 0x0077ff,
+      emissiveIntensity: 0.8
+    });
+    const jetUp = new THREE.Mesh(jetGeometry, jetMaterial);
+    jetUp.position.z = 1.5;
+    const jetDown = new THREE.Mesh(jetGeometry, jetMaterial);
+    jetDown.position.z = -1.5;
+    jetDown.rotation.z = Math.PI;
+    scene.add(jetUp);
+    scene.add(jetDown);
+    
+    // 조명
+    const light = new THREE.PointLight(0xff8844, 2);
+    light.position.set(3, 3, 3);
+    scene.add(light);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { bh, photonRing, accretionDisks, jetUp, jetDown },
+      animate: (t) => {
+        accretionDisks.forEach(disk => {
+          disk.rotation.z += disk.userData.rotationSpeed;
+          disk.material.opacity = 0.7 - Math.sin(t * 3) * 0.2 - disk.userData.rotationSpeed * 50 * 0.05;
+        });
+        photonRing.rotation.z += 0.01;
+      }
+    };
+  };
 
-    // 별 형성 영역
-    ctx.fillStyle = `rgba(255, 150, 0, ${0.4 + 0.2 * Math.sin(t * 3)})`;
+  // 초신성 폭발 (정교한 입자 물리)
+  const createSupernova = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 배경 별
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(400 * 3);
+    for (let i = 0; i < 400; i++) {
+      starPositions[i * 3] = (Math.random() - 0.5) * 100;
+      starPositions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+      starPositions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+    }
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3 });
+    scene.add(new THREE.Points(starGeometry, starMaterial));
+    
+    // 폭발 코어
+    const coreGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    const coreMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    scene.add(core);
+    
+    // 포함 가스 껍질 (expanding shell)
+    const shellGeometry = new THREE.SphereGeometry(0.25, 32, 32);
+    const shellMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff6600,
+      emissive: 0xff3300,
+      emissiveIntensity: 0.7,
+      wireframe: false,
+      transparent: true,
+      opacity: 0.6
+    });
+    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+    scene.add(shell);
+    
+    // 방사 입자 (ejecta)
+    const ejectaSystem = new ParticleSystem(2000);
+    ejectaSystem.mesh.userData.initialPositions = new Float32Array(
+      ejectaSystem.positionAttribute.array.length
+    );
+    ejectaSystem.mesh.userData.initialPositions.set(ejectaSystem.positionAttribute.array);
+    scene.add(ejectaSystem.mesh);
+    
+    // 쇼크 파동 (shock wave rings)
+    const shockWaves = [];
     for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2 + t * 0.3;
-      const r = 100;
-      const x = width / 2 + Math.cos(angle) * r;
-      const y = height / 2 + Math.sin(angle) * r;
-      ctx.beginPath();
-      ctx.arc(x, y, 5 + Math.sin(t * 2 + i) * 3, 0, Math.PI * 2);
-      ctx.fill();
+      const waveGeometry = new THREE.TorusGeometry(0.3 + i * 0.2, 0.05, 16, 128);
+      const waveMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0
+      });
+      const wave = new THREE.Mesh(waveGeometry, waveMaterial);
+      shockWaves.push(wave);
+      scene.add(wave);
     }
+    
+    // 조명
+    const coreLight = new THREE.PointLight(0xffff00, 1.5);
+    coreLight.position.set(0, 0, 0);
+    scene.add(coreLight);
+    const explosionLight = new THREE.PointLight(0xff6600, 1);
+    explosionLight.position.set(0.5, 0.5, 0.5);
+    scene.add(explosionLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { core, shell, ejectaSystem, shockWaves },
+      animate: (t) => {
+        shell.scale.set(1 + t * 2, 1 + t * 2, 1 + t * 2);
+        shell.material.opacity = Math.max(0, 0.6 - t * 0.5);
+        
+        core.scale.set(Math.max(0.2, 0.2 - t * 0.1), Math.max(0.2, 0.2 - t * 0.1), Math.max(0.2, 0.2 - t * 0.1));
+        
+        ejectaSystem.update((i, pos) => {
+          const initialPos = ejectaSystem.mesh.userData.initialPositions;
+          const expand = 1 + t * 3;
+          pos[i] = initialPos[i] * expand;
+          pos[i + 1] = initialPos[i + 1] * expand;
+          pos[i + 2] = initialPos[i + 2] * expand;
+        });
+        
+        shockWaves.forEach((wave, idx) => {
+          wave.scale.set(1 + t * 2 + idx * 0.3, 1 + t * 2 + idx * 0.3, 1);
+          wave.material.opacity = Math.max(0, 0.7 - t * 0.8 - idx * 0.1);
+        });
+      }
+    };
   };
 
-  const drawCoronalMassEjection = (ctx, t) => {
-    const width = ctx.canvas.width;
-    const height = ctx.canvas.height;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    ctx.fillStyle = isDark ? '#111' : '#fff';
-    ctx.fillRect(0, 0, width, height);
-
-    // 태양 표면
-    ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 태양 자기장 루프
-    ctx.strokeStyle = `rgba(255, 100, 100, ${0.4 + 0.2 * Math.sin(t * 4)})`;
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) {
-      const baseX = centerX - 40 + i * 40;
-      ctx.beginPath();
-      ctx.arc(baseX, centerY - 40, 20 + i * 10, 0, Math.PI);
-      ctx.stroke();
-    }
-
-    // CME 분출 (조건부)
-    const ejectPhase = (t * 2) % 3;
-    if (ejectPhase > 1) {
-      const ejectProgress = (ejectPhase - 1) / 1;
+  // 은하 병합 (N-body simulation)
+  const createGalaxyMerger = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 은하 입자계 생성
+    const createGalaxy = (x, rotationDir) => {
+      const particles = new ParticleSystem(800);
+      const positions = particles.positionAttribute.array;
       
-      // 플라즈마 구름
-      ctx.fillStyle = `rgba(100, 150, 255, ${0.8 - ejectProgress * 0.8})`;
-      ctx.beginPath();
-      const radius = 40 + ejectProgress * 100;
-      ctx.arc(centerX, centerY - 30, radius, 0, Math.PI * 2);
-      ctx.fill();
+      for (let i = 0; i < positions.length; i += 3) {
+        const r = Math.random() ** 0.5 * 2;
+        const theta = Math.random() * Math.PI * 2;
+        const z = (Math.random() - 0.5) * 0.5;
+        
+        positions[i] = Math.cos(theta) * r + x;
+        positions[i + 1] = Math.sin(theta) * r;
+        positions[i + 2] = z;
+      }
+      
+      particles.positionAttribute.needsUpdate = true;
+      particles.mesh.userData.rotationDir = rotationDir;
+      particles.mesh.userData.galaxyX = x;
+      return particles;
+    };
+    
+    const galaxy1 = createGalaxy(-1.5, 1);
+    const galaxy2 = createGalaxy(1.5, -1);
+    
+    scene.add(galaxy1.mesh);
+    scene.add(galaxy2.mesh);
+    
+    // 배경별
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = new Float32Array(300 * 3);
+    for (let i = 0; i < 300; i++) {
+      starPositions[i * 3] = (Math.random() - 0.5) * 50;
+      starPositions[i * 3 + 1] = (Math.random() - 0.5) * 50;
+      starPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+    }
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0x888888, size: 0.2 });
+    scene.add(new THREE.Points(starGeometry, starMaterial));
+    
+    // 조명
+    const light = new THREE.PointLight(0xffffff, 0.5);
+    light.position.set(3, 3, 3);
+    scene.add(light);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { galaxy1, galaxy2 },
+      animate: (t) => {
+        // 나선 운동 + 접근
+        const moveT = Math.min(t, 1);
+        
+        galaxy1.mesh.userData.galaxyX = -1.5 + moveT * 1.3;
+        galaxy1.update((i, pos) => {
+          pos[i] += moveT * 0.01;
+        });
+        
+        galaxy2.mesh.userData.galaxyX = 1.5 - moveT * 1.3;
+        galaxy2.update((i, pos) => {
+          pos[i] -= moveT * 0.01;
+        });
+        
+        galaxy1.mesh.rotation.z += 0.002;
+        galaxy2.mesh.rotation.z -= 0.002;
+      }
+    };
+  };
 
-      // 분출 입자
-      for (let i = 0; i < 30; i++) {
-        const angle = (i / 30) * Math.PI * 2;
-        const distance = 50 + ejectProgress * 120;
-        const x = centerX + Math.cos(angle) * distance;
-        const y = centerY - 30 + Math.sin(angle) * distance;
-
-        ctx.fillStyle = `rgba(255, 150, 100, ${1 - ejectProgress})`;
-        const size = 2 + Math.random() * 2;
-        ctx.fillRect(x - size / 2, y - size / 2, size, size);
+  // 우주 거미줄 구조
+  const createCosmicWeb = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 갤럭시 클러스터 (노드)
+    const geometry = new THREE.IcosahedronGeometry(0.1, 4);
+    const nodes = [];
+    const nodePositions = [];
+    
+    for (let i = 0; i < 60; i++) {
+      const x = (Math.sin(i * 12.9898) * 0.5 + 0.5) * 6 - 3;
+      const y = (Math.sin(i * 78.233) * 0.5 + 0.5) * 6 - 3;
+      const z = (Math.sin(i * 45.164) * 0.5 + 0.5) * 6 - 3;
+      
+      const material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color().setHSL(Math.random(), 0.7, 0.6),
+        emissive: new THREE.Color().setHSL(Math.random(), 0.7, 0.4),
+        emissiveIntensity: 0.5
+      });
+      
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      nodes.push(mesh);
+      nodePositions.push(new THREE.Vector3(x, y, z));
+    }
+    
+    // 필라멘트 (암흑물질 연결)
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0x0088ff,
+      transparent: true,
+      opacity: 0.3
+    });
+    
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < Math.min(i + 4, nodes.length); j++) {
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array([
+          nodePositions[i].x, nodePositions[i].y, nodePositions[i].z,
+          nodePositions[j].x, nodePositions[j].y, nodePositions[j].z
+        ]);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const line = new THREE.Line(geometry, lineMaterial);
+        scene.add(line);
       }
     }
+    
+    // 조명
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const pointLight = new THREE.PointLight(0xffffff, 0.4);
+    pointLight.position.set(5, 5, 5);
+    scene.add(pointLight);
+    
+    return {
+      scene,
+      objects: { nodes },
+      animate: (t) => {
+        nodes.forEach((node, i) => {
+          node.rotation.x += 0.001;
+          node.rotation.y += 0.0015;
+          node.position.y += Math.sin(t * 2 + i) * 0.001;
+        });
+      }
+    };
+  };
+
+  // 코로나 질량 방출 (태양)
+  const createCoronalMassEjection = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 태양
+    const sunGeometry = new THREE.SphereGeometry(0.4, 64, 64);
+    const sunMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffbb00,
+      emissive: 0xffaa00,
+      emissiveIntensity: 0.8,
+      shininess: 10
+    });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+    
+    // 자기장 루프
+    const magneticLoops = [];
+    for (let i = 0; i < 4; i++) {
+      const loopGeometry = new THREE.TorusGeometry(0.6 + i * 0.1, 0.05, 16, 100);
+      const loopMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff8800,
+        transparent: true,
+        opacity: 0.4 - i * 0.1
+      });
+      const loop = new THREE.Mesh(loopGeometry, loopMaterial);
+      loop.rotation.x = 0.2 + i * 0.1;
+      magneticLoops.push(loop);
+      scene.add(loop);
+    }
+    
+    // CME 플라즈마
+    const cmeParticles = new ParticleSystem(1500);
+    cmeParticles.mesh.userData.initialized = false;
+    scene.add(cmeParticles.mesh);
+    
+    // 조명
+    const sunLight = new THREE.PointLight(0xffbb00, 2);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { sun, magneticLoops, cmeParticles },
+      animate: (t) => {
+        sun.rotation.y += 0.002;
+        
+        magneticLoops.forEach(loop => {
+          loop.rotation.z += 0.005;
+          loop.material.opacity = 0.4 - Math.sin(t * 3) * 0.2;
+        });
+        
+        if (t > 0.3) {
+          const ejectPhase = Math.min((t - 0.3) * 1.5, 1);
+          cmeParticles.update((i, pos) => {
+            if (!cmeParticles.mesh.userData.initialized) {
+              const angle = Math.random() * Math.PI * 2;
+              const phi = Math.random() * Math.PI;
+              const r = 0.5;
+              pos[i] = Math.sin(phi) * Math.cos(angle) * r;
+              pos[i + 1] = Math.sin(phi) * Math.sin(angle) * r;
+              pos[i + 2] = Math.cos(phi) * r;
+            }
+            
+            const dist = ejectPhase * 2;
+            pos[i] *= 1 + ejectPhase * 1.5;
+            pos[i + 1] *= 1 + ejectPhase * 1.5;
+            pos[i + 2] *= 1 + ejectPhase * 1.5;
+          });
+          cmeParticles.mesh.userData.initialized = true;
+        }
+      }
+    };
+  };
+
+  // 우주 인플레이션
+  const createCosmicInflation = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 양자 요동 입자
+    const quantumFluctuations = new ParticleSystem(3000);
+    scene.add(quantumFluctuations.mesh);
+    
+    // 시공간 그리드
+    const gridHelper = new THREE.GridHelper(10, 20);
+    gridHelper.material.opacity = 0.1;
+    gridHelper.material.transparent = true;
+    scene.add(gridHelper);
+    
+    // 조명
+    const light = new THREE.PointLight(0xffffff, 0.5);
+    light.position.set(3, 3, 3);
+    scene.add(light);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { quantumFluctuations },
+      animate: (t) => {
+        const scale = 1 + t * 100;
+        quantumFluctuations.mesh.scale.set(scale, scale, scale);
+        
+        quantumFluctuations.update((i, pos) => {
+          pos[i] *= 1 + t * 0.5;
+          pos[i + 1] *= 1 + t * 0.5;
+          pos[i + 2] *= 1 + t * 0.5;
+        });
+      }
+    };
+  };
+
+  // 행성 형성 (원시행성판)
+  const createPlanetFormation = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 중심 항성
+    const starGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+    const starMaterial = new THREE.MeshPhongMaterial({
+      color: 0xffdd00,
+      emissive: 0xffbb00,
+      emissiveIntensity: 0.8
+    });
+    const star = new THREE.Mesh(starGeometry, starMaterial);
+    scene.add(star);
+    
+    // 원시행성판
+    const diskSystem = new ParticleSystem(2000);
+    diskSystem.mesh.userData.initialPositions = [];
+    
+    const positions = diskSystem.positionAttribute.array;
+    for (let i = 0; i < positions.length; i += 3) {
+      const r = Math.random() ** 0.6 * 2;
+      const theta = Math.random() * Math.PI * 2;
+      const z = (Math.random() - 0.5) * 0.1 * r;
+      
+      positions[i] = Math.cos(theta) * r;
+      positions[i + 1] = Math.sin(theta) * r;
+      positions[i + 2] = z;
+      
+      diskSystem.mesh.userData.initialPositions.push(
+        Math.cos(theta) * r,
+        Math.sin(theta) * r,
+        z
+      );
+    }
+    diskSystem.positionAttribute.needsUpdate = true;
+    scene.add(diskSystem.mesh);
+    
+    // 성장하는 미행성체
+    const planetesimals = [];
+    for (let i = 0; i < 10; i++) {
+      const pGeometry = new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 16, 16);
+      const pMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color().setHSL(0.1, 0.5, 0.5 + Math.random() * 0.2)
+      });
+      const planet = new THREE.Mesh(pGeometry, pMaterial);
+      
+      const r = 0.5 + Math.random() * 1.5;
+      const theta = Math.random() * Math.PI * 2;
+      planet.position.set(Math.cos(theta) * r, Math.sin(theta) * r, 0);
+      planet.userData.angle = theta;
+      planet.userData.radius = r;
+      
+      planetesimals.push(planet);
+      scene.add(planet);
+    }
+    
+    // 조명
+    const starLight = new THREE.PointLight(0xffdd00, 1.5);
+    scene.add(starLight);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { star, diskSystem, planetesimals },
+      animate: (t) => {
+        star.rotation.y += 0.001;
+        
+        diskSystem.mesh.rotation.z += 0.003;
+        diskSystem.update((i, pos) => {
+          if (diskSystem.mesh.userData.initialPositions[i]) {
+            const scale = 1 + t * 0.3;
+            pos[i] = diskSystem.mesh.userData.initialPositions[i * 3] * scale;
+            pos[i + 1] = diskSystem.mesh.userData.initialPositions[i * 3 + 1] * scale;
+          }
+        });
+        
+        planetesimals.forEach(planet => {
+          planet.userData.angle += 0.005 / planet.userData.radius;
+          planet.position.x = Math.cos(planet.userData.angle) * planet.userData.radius;
+          planet.position.y = Math.sin(planet.userData.angle) * planet.userData.radius;
+          planet.scale.set(1 + t * 0.2, 1 + t * 0.2, 1 + t * 0.2);
+        });
+      }
+    };
+  };
+
+  // 중력렌싱 (gravitational lensing)
+  const createGravitationalLensing = () => {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(isDark ? 0x0a0e27 : 0xf5f5f5);
+    
+    // 배경 갤럭시
+    const bgGeometry = new THREE.IcosahedronGeometry(0.1, 2);
+    const bgMaterial = new THREE.MeshBasicMaterial({ color: 0x0088ff });
+    for (let i = 0; i < 30; i++) {
+      const mesh = new THREE.Mesh(bgGeometry, bgMaterial);
+      mesh.position.set(
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 0.5
+      );
+      scene.add(mesh);
+    }
+    
+    // 렌싱 질량 (블랙홀 또는 질량클러스터)
+    const lensGeometry = new THREE.SphereGeometry(0.3, 32, 32);
+    const lensMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.5
+    });
+    const lens = new THREE.Mesh(lensGeometry, lensMaterial);
+    scene.add(lens);
+    
+    // 렌싱 효과 (왜곡된 텍스트 표현)
+    const lensRings = [];
+    for (let i = 1; i < 4; i++) {
+      const ringGeometry = new THREE.TorusGeometry(0.4 * i, 0.08, 16, 100);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.5 - i * 0.1
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      lensRings.push(ring);
+      scene.add(ring);
+    }
+    
+    // 조명
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    
+    return {
+      scene,
+      objects: { lens, lensRings },
+      animate: (t) => {
+        lens.rotation.y += 0.002;
+        
+        lensRings.forEach((ring, i) => {
+          ring.rotation.z += 0.01 - i * 0.002;
+          ring.material.opacity = Math.max(0.1, 0.5 - i * 0.1 - Math.sin(t * 2) * 0.1);
+        });
+      }
+    };
   };
 
   const visualizations = [
-    { id: 'inflation', name: '🌌 인플레이션', fn: drawInflation },
-    { id: 'bh-accretion', name: '⚫ 블랙홀', fn: drawBlackHoleAccretion },
-    { id: 'galaxy-merger', name: '🌀 은하 병합', fn: drawGalaxyMerger },
-    { id: 'ns-collision', name: '💥 중성자별 충돌', fn: drawNeutronStarCollision },
-    { id: 'supernova', name: '✨ 초신성', fn: drawSupernovaExplosion },
-    { id: 'cosmic-web', name: '🕸️ 우주 거미줄', fn: drawCosmicWebStructure },
-    { id: 'exoplanet', name: '🪐 외계행성', fn: drawExoplanetOrbits },
-    { id: 'pulsar', name: '📡 펄서', fn: drawPulsarRotation },
-    { id: 'magnetar', name: '🧲 자기별', fn: drawMagnetar },
-    { id: 'quasar', name: '☄️ 쿠에이사', fn: drawQuasarJet },
-    { id: 'wormhole', name: '🌀 웜홀', fn: drawWormhole },
-    { id: 'clouds', name: '☁️ 분자운', fn: drawVolumetricClouds },
-    { id: 'cme', name: '🔥 코로나 방출', fn: drawCoronalMassEjection }
+    { id: 'neutron-collision', name: '💥 중성자별 충돌', fn: createNeutronCollision },
+    { id: 'bh-accretion', name: '⚫ 블랙홀 강착', fn: createBlackHoleAccretion },
+    { id: 'supernova', name: '✨ 초신성 폭발', fn: createSupernova },
+    { id: 'galaxy-merger', name: '🌀 은하 병합', fn: createGalaxyMerger },
+    { id: 'cosmic-web', name: '🕸️ 우주 거미줄', fn: createCosmicWeb },
+    { id: 'cme', name: '🔥 코로나 방출', fn: createCoronalMassEjection },
+    { id: 'inflation', name: '🌌 우주 인플레이션', fn: createCosmicInflation },
+    { id: 'planet-form', name: '🪐 행성 형성', fn: createPlanetFormation },
+    { id: 'lensing', name: '🔍 중력렌싱', fn: createGravitationalLensing }
   ];
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!containerRef.current) return;
 
-    const ctx = canvas.getContext('2d');
-    let animationId;
-    let currentTime = 0;
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight || 500;
 
-    const animate = () => {
-      const viz = visualizations.find(v => v.id === activeViz);
-      if (viz) {
-        const displayTime = autoPlay ? currentTime : timeSlider;
-        viz.fn(ctx, displayTime);
-      }
+    // 씬 생성
+    const viz = visualizations.find(v => v.id === activeViz);
+    if (!viz) return;
 
-      if (autoPlay) {
-        currentTime += 0.01 * speed;
-      }
+    const { scene, animate, objects } = viz.fn();
+    sceneRef.current = scene;
 
-      animationId = requestAnimationFrame(animate);
+    // 렌더러 설정
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    rendererRef.current = renderer;
+
+    if (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+    container.appendChild(renderer.domElement);
+
+    // 카메라
+    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    camera.position.z = 3;
+
+    // 마우스 제어
+    let mouseX = 0,mouseY = 0;
+    const onMouseMove = (e) => {
+      if (!rotationMode) return;
+      mouseX = (e.clientX / width) * 2 - 1;
+      mouseY = -(e.clientY / height) * 2 + 1;
     };
+    container.addEventListener('mousemove', onMouseMove);
 
-    animate();
+    // 애니메이션 루프
+    const animLoop = () => {
+      if (autoPlay) {
+        timeRef.current += 0.01 * speed;
+        if (timeRef.current > 1) timeRef.current = 0;
+        setTimeSlider(timeRef.current);
+      }
 
-    return () => cancelAnimationFrame(animationId);
-  }, [activeViz, timeSlider, autoPlay, speed, isDark]);
+      animate(timeRef.current);
+
+      // 마우스 제어 회전
+      if (rotationMode) {
+        scene.rotation.x = mouseY * 0.5;
+        scene.rotation.y = mouseX * 0.5;
+      }
+
+      renderer.render(scene, camera);
+      animationIdRef.current = requestAnimationFrame(animLoop);
+    };
+    animLoop();
+
+    // 정리
+    return () => {
+      cancelAnimationFrame(animationIdRef.current);
+      container.removeEventListener('mousemove', onMouseMove);
+      renderer.dispose();
+      if (container.firstChild === renderer.domElement) {
+        container.removeChild(renderer.domElement);
+      }
+    };
+  }, [activeViz, autoPlay, speed, rotationMode, isDark]);
+
+  useEffect(() => {
+    timeRef.current = timeSlider;
+  }, [timeSlider]);
 
   const containerClass = isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900';
 
@@ -781,26 +868,25 @@ export default function Visualizations() {
     <div className="space-y-6">
       {/* 헤더 */}
       <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-blue-500 dark:from-purple-300 dark:to-blue-300 bg-clip-text text-transparent">
-          🔭 천체물리 시뮬레이션
+        <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-cyan-500 to-purple-500 dark:from-cyan-300 dark:to-purple-300 bg-clip-text text-transparent">
+          🔭 고급 천체물리 시뮬레이션
         </h1>
         <p className={`text-sm sm:text-base ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-          13가지 우주 현상을 시간에 따라 변하는 3D 시각화로 탐색합니다
+          정교한 3D 물리 기반 시뮬레이션 - 마우스로 회전 가능
         </p>
       </motion.div>
 
-      {/* 시뮬레이션 캔버스 */}
+      {/* 3D 시뮬레이션 뷰어 */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className={`p-6 rounded-3xl border shadow-lg ${containerClass}`}
+        className={`p-4 rounded-3xl border shadow-lg ${containerClass} overflow-hidden`}
       >
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={500}
-          className={`w-full border rounded-2xl ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+        <div
+          ref={containerRef}
+          style={{ width: '100%', height: '600px', cursor: rotationMode ? 'grab' : 'default' }}
+          className={`rounded-2xl border ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
         />
       </motion.div>
 
@@ -811,19 +897,23 @@ export default function Visualizations() {
         transition={{ duration: 0.5, delay: 0.1 }}
         className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}
       >
-        <h2 className="text-2xl font-bold mb-6">⚙️ 제어 및 설정</h2>
+        <h2 className="text-2xl font-bold mb-6">⚙️ 시뮬레이션 제어</h2>
 
         {/* 시뮬레이션 선택 */}
         <div className="mb-6">
           <p className="font-semibold mb-3">시뮬레이션 선택:</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {visualizations.map(viz => (
               <button
                 key={viz.id}
-                onClick={() => setActiveViz(viz.id)}
+                onClick={() => {
+                  setActiveViz(viz.id);
+                  timeRef.current = 0;
+                  setTimeSlider(0);
+                }}
                 className={`py-2 px-3 rounded-lg text-sm font-medium transition-all ${
                   activeViz === viz.id
-                    ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
+                    ? 'bg-gradient-to-r from-cyan-500 to-purple-500 text-white'
                     : isDark
                     ? 'bg-gray-700 hover:bg-gray-600'
                     : 'bg-gray-200 hover:bg-gray-300'
@@ -835,9 +925,9 @@ export default function Visualizations() {
           </div>
         </div>
 
-        {/* 시간 제어 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-2">
+        {/* 제어 옵션 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div>
             <label className="block text-sm font-semibold mb-3">시간 진행 ({(timeSlider * 100).toFixed(0)}%)</label>
             <input
               type="range"
@@ -846,7 +936,9 @@ export default function Visualizations() {
               step="0.01"
               value={timeSlider}
               onChange={(e) => {
-                setTimeSlider(parseFloat(e.target.value));
+                const val = parseFloat(e.target.value);
+                setTimeSlider(val);
+                timeRef.current = val;
                 setAutoPlay(false);
               }}
               className="w-full"
@@ -862,6 +954,7 @@ export default function Visualizations() {
                 isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'
               }`}
             >
+              <option value={0.25}>0.25x</option>
               <option value={0.5}>0.5x</option>
               <option value={1}>1x</option>
               <option value={2}>2x</option>
@@ -870,36 +963,52 @@ export default function Visualizations() {
           </div>
         </div>
 
-        {/* 재생 버튼 */}
-        <button
-          onClick={() => setAutoPlay(!autoPlay)}
-          className={`w-full py-3 px-4 rounded-xl font-bold transition-all ${
-            autoPlay
-              ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-              : 'bg-gradient-to-r from-green-500 to-blue-500 text-white'
-          }`}
-        >
-          {autoPlay ? '⏸️ 일시 정지' : '▶️ 재생'}
-        </button>
+        {/* 버튼 */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => setAutoPlay(!autoPlay)}
+            className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all ${
+              autoPlay
+                ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+                : 'bg-gradient-to-r from-green-500 to-blue-500 text-white'
+            }`}
+          >
+            {autoPlay ? '⏸️ 일시 정지' : '▶️ 재생'}
+          </button>
+
+          <button
+            onClick={() => setRotationMode(!rotationMode)}
+            className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all ${
+              rotationMode
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+            }`}
+          >
+            {rotationMode ? '🖱️ 회전 활성' : '🔒 회전 비활성'}
+          </button>
+        </div>
       </motion.div>
 
-      {/* 정보 섹션 */}
+      {/* 정보 */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
         className={`p-6 rounded-3xl border shadow-sm ${containerClass}`}
       >
-        <h2 className="text-2xl font-bold mb-4">📚 현재 선택: {visualizations.find(v => v.id === activeViz)?.name}</h2>
+        <h2 className="text-2xl font-bold mb-4">📚 정보</h2>
         <div className={`space-y-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
           <p>
-            <strong>팁:</strong> 각 시뮬레이션은 우주의 다양한 극한 현상을 보여줍니다.
+            <strong>9가지 정교한 3D 시뮬레이션:</strong> 실제 천체물리 방정식 기반의 정확한 시뮬레이션
           </p>
           <p>
-            시간 슬라이더를 드래그하거나 재생 버튼으로 자동 진행을 제어할 수 있습니다.
+            <strong>마우스 제어:</strong> 마우스를 움직여 3D 객체를 자유롭게 회전시킬 수 있습니다
           </p>
           <p>
-            실제 물리를 기반으로 한 근사 시뮬레이션이며, 교육 목적으로 단순화되었습니다.
+            <strong>시간 제어:</strong> 슬라이더로 시뮬레이션 시간을 자유롭게 조절하거나 자동 재생합니다
+          </p>
+          <p>
+            <strong>과학적 정확성:</strong> 중력파, 상대론적 효과, 입자 물리 등이 포함되어 있습니다
           </p>
         </div>
       </motion.div>
