@@ -973,13 +973,20 @@ export default function Visualizations() {
     window.addEventListener('mousemove', handleMouseMove);
 
     // 애니메이션 루프
+    let frameCount = 0;
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
 
       if (autoPlay) {
-        timeRef.current += 0.016 * speed; // 60fps 기준으로 약 1.67초에 완주
+        timeRef.current += 0.016 * speed;
         if (timeRef.current > 1) timeRef.current = 0;
-        setTimeSlider(timeRef.current);
+        
+        // 30프레임마다 UI만 업데이트
+        frameCount++;
+        if (frameCount >= 2) {
+          setTimeSlider(timeRef.current);
+          frameCount = 0;
+        }
       } else {
         timeRef.current = timeSlider;
       }
@@ -1001,7 +1008,7 @@ export default function Visualizations() {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
     };
-  }, [activeViz, autoPlay, speed, rotationMode, isDark, currentVizConfig]);
+  }, [activeViz, rotationMode, isDark, currentVizConfig]);
 
   return (
     <div className={`space-y-6 ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
