@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../context/ThemeContext';
 import * as THREE from 'three';
@@ -18,6 +18,7 @@ export default function Visualizations() {
   const animationIdRef = useRef(null);
   const timeRef = useRef(0);
   const mouseRef = useRef({ x: 0, y: 0, down: false });
+  const uiUpdateIntervalRef = useRef(null);
 
   // Planck 법칙 기반 온도-색상 변환 (현실적인 천체 색상)
   const temperatureToColor = (temp) => {
@@ -924,10 +925,13 @@ export default function Visualizations() {
     { id: 'lensing', name: '🔭 중력 렌즈', create: createGravitationalLensing }
   ];
 
-  const currentVizConfig = visualizations.find(v => v.id === activeViz);
+  const currentVizConfig = useMemo(
+    () => visualizations.find(v => v.id === activeViz),
+    [activeViz]
+  );
   const containerClass = `${isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`;
 
-  // 초기화 및 렌더링
+  // 시각화 초기화 (activeViz 변경 시만)
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -972,20 +976,15 @@ export default function Visualizations() {
 
     window.addEventListener('mousemove', handleMouseMove);
 
-    // 애니메이션 루프
-    let frameCount = 0;
+    // 애니메이션 루프 - 렌더링만 (상태 변경 최소화)
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
 
+      // timeRef.current 업데이트 (상태 변경 없음 - 순수 숫자 업데이트)
       if (autoPlay) {
         timeRef.current += 0.016 * speed;
-        if (timeRef.current > 1) timeRef.current = 0;
-        
-        // 30프레임마다 UI만 업데이트
-        frameCount++;
-        if (frameCount >= 2) {
-          setTimeSlider(timeRef.current);
-          frameCount = 0;
+        if (timeRef.current >= 1) {
+          timeRef.current = 0;
         }
       } else {
         timeRef.current = timeSlider;
@@ -1004,11 +1003,17 @@ export default function Visualizations() {
 
     animate();
 
+    // UI 업데이트를 별도의 인터벌로 분리 (20fps)
+    uiUpdateIntervalRef.current = setInterval(() => {
+      setTimeSlider(timeRef.current);
+    }, 50);
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
+      if (uiUpdateIntervalRef.current) clearInterval(uiUpdateIntervalRef.current);
     };
-  }, [activeViz, rotationMode, isDark, currentVizConfig]);
+  }, [activeViz]);
 
   return (
     <div className={`space-y-6 ${isDark ? 'bg-gray-950' : 'bg-gray-50'}`}>
