@@ -973,13 +973,20 @@ export default function Visualizations() {
     window.addEventListener('mousemove', handleMouseMove);
 
     // 애니메이션 루프
+    let lastTimeUpdate = 0;
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
 
       if (autoPlay) {
-        timeRef.current += 0.003 * speed;
+        timeRef.current += 0.016 * speed; // 60fps 기준으로 약 1.67초에 완주
         if (timeRef.current > 1) timeRef.current = 0;
-        setTimeSlider(timeRef.current);
+        
+        // 상태 업데이트는 16ms마다만 수행
+        lastTimeUpdate += 0.016;
+        if (lastTimeUpdate >= 0.03) {
+          setTimeSlider(timeRef.current);
+          lastTimeUpdate = 0;
+        }
       } else {
         timeRef.current = timeSlider;
       }
