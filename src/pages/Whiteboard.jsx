@@ -21,6 +21,15 @@ import { getCurrentUser } from '../utils/auth';
 const BOARD_ID = 'global-whiteboard';
 const HEARTBEAT_INTERVAL_MS = 15000;
 const PRESENCE_TIMEOUT_MS = 45000;
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 3;
+const GRID_SPACING = 80;
+const TOOL_OPTIONS = [
+  { key: 'pen', label: '펜' },
+  { key: 'highlighter', label: '형광펜' },
+  { key: 'eraser', label: '지우개' },
+  { key: 'pan', label: '이동' },
+];
 
 const createUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -29,15 +38,26 @@ const createUUID = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+const clampValue = (value, min, max) => {
+  return Math.min(Math.max(value, min), max);
+};
+
 export default function Whiteboard() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const heartbeatRef = useRef(null);
+  const viewportRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 });
+  const panStateRef = useRef({ startX: 0, startY: 0, originX: 0, originY: 0 });
+  const [viewport, setViewport] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+  const [gridEnabled, setGridEnabled] = useState(false);
+  const [tool, setTool] = useState('pen');
   const [strokes, setStrokes] = useState([]);
   const [activeStroke, setActiveStroke] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
   const [brushColor, setBrushColor] = useState('#0ea5e9');
   const [brushSize, setBrushSize] = useState(4);
+  const [localStrokeHistory, setLocalStrokeHistory] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('세션을 초기화하는 중입니다...');
@@ -45,6 +65,28 @@ export default function Whiteboard() {
   const { isDark } = useTheme();
   const user = useMemo(() => getCurrentUser(), []);
   const presenceId = useMemo(createUUID, []);
+  const canvasCursor = useMemo(() => {
+    if (tool === 'pan') {
+      return isPanning ? 'grabbing' : 'grab';
+    }
+    if (tool === 'eraser') {
+      return 'cell';
+    }
+    return 'crosshair';
+  }, [isPanning, tool]);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+  }, [viewport]);
+
+  useEffect(() => {
+    if (tool === 'highlighter' && brushSize < 10) {
+      setBrushSize(14);
+    }
+    if (tool === 'eraser' && brushSize < 12) {
+      setBrushSize(18);
+    }
+  }, [tool]);
 
   const sessionRef = useMemo(() => doc(db, 'whiteboardSessions', BOARD_ID), []);
   const strokesQuery = useMemo(
@@ -86,17 +128,33 @@ export default function Whiteboard() {
     canvas.style.height = `${height}px`;
     const ctx = canvas.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    setViewport((prev) => {
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const boardCenterX = (centerX - prev.offsetX) / prev.scale;
+      const boardCenterY = (centerY - prev.offsetY) / prev.scale;
+      return {
+        scale: prev.scale,
+        offsetX: centerX - boardCenterX * prev.scale,
+        offsetY: centerY - boardCenterY * prev.scale,
+      };
+    });
   }, []);
 
   const drawStroke = useCallback((ctx, stroke) => {
     if (!stroke?.points?.length) {
       return;
     }
+    const mode = stroke.mode ?? 'pen';
+    ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = stroke.color;
     ctx.lineWidth = stroke.size;
-    ctx.globalAlpha = stroke.opacity ?? 1;
+    ctx.globalCompositeOperation = mode === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = mode === 'eraser' ? '#000000' : stroke.color;
+    const opacity = stroke.opacity ?? (mode === 'highlighter' ? 0.35 : 1);
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
     for (let i = 1; i < stroke.points.length; i += 1) {
@@ -104,7 +162,7 @@ export default function Whiteboard() {
       ctx.lineTo(point.x, point.y);
     }
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }, []);
 
   const redrawCanvas = useCallback(
@@ -115,23 +173,61 @@ export default function Whiteboard() {
       }
       const ctx = canvas.getContext('2d');
       const background = isDark ? '#020617' : '#f8fafc';
+      const { scale, offsetX, offsetY } = viewportRef.current;
+
       ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (gridEnabled) {
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+        const inverseScale = 1 / scale;
+        const visibleWidth = canvas.width * inverseScale;
+        const visibleHeight = canvas.height * inverseScale;
+        const startX = Math.floor(((-offsetX) * inverseScale) / GRID_SPACING) * GRID_SPACING;
+        const startY = Math.floor(((-offsetY) * inverseScale) / GRID_SPACING) * GRID_SPACING;
+        const endX = startX + visibleWidth + GRID_SPACING * 2;
+        const endY = startY + visibleHeight + GRID_SPACING * 2;
+        ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(51, 65, 85, 0.12)';
+        ctx.lineWidth = inverseScale;
+        ctx.beginPath();
+        for (let x = startX; x <= endX; x += GRID_SPACING) {
+          ctx.moveTo(x, startY - GRID_SPACING);
+          ctx.lineTo(x, endY + GRID_SPACING);
+        }
+        for (let y = startY; y <= endY; y += GRID_SPACING) {
+          ctx.moveTo(startX - GRID_SPACING, y);
+          ctx.lineTo(endX + GRID_SPACING, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
       strokes.forEach((stroke) => drawStroke(ctx, stroke));
       if (overlayStroke) {
         drawStroke(ctx, overlayStroke);
       }
       ctx.restore();
+      ctx.restore();
     },
-    [drawStroke, isDark, strokes]
+    [drawStroke, gridEnabled, isDark, strokes]
   );
 
   useEffect(() => {
     resizeCanvas();
     redrawCanvas(activeStroke);
   }, [activeStroke, redrawCanvas, resizeCanvas]);
+
+  useEffect(() => {
+    redrawCanvas(activeStroke);
+  }, [activeStroke, gridEnabled, redrawCanvas, viewport]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -156,6 +252,8 @@ export default function Whiteboard() {
           size: docSnap.data().size,
           opacity: docSnap.data().opacity ?? 1,
           points: docSnap.data().points ?? [],
+          mode: docSnap.data().mode ?? 'pen',
+          userId: docSnap.data().userId ?? null,
         }));
         setStrokes(remoteStrokes);
         setStatus('동기화 완료');
@@ -240,7 +338,7 @@ export default function Whiteboard() {
     return () => unsubscribe();
   }, [presenceCollection]);
 
-  const extractPoint = useCallback((event) => {
+  const extractBoardPoint = useCallback((event) => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return null;
@@ -249,37 +347,89 @@ export default function Whiteboard() {
     const { clientX, clientY } = event;
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+    const canvasX = (clientX - rect.left) * scaleX;
+    const canvasY = (clientY - rect.top) * scaleY;
+    const { scale, offsetX, offsetY } = viewportRef.current;
     return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
+      x: (canvasX - offsetX) / scale,
+      y: (canvasY - offsetY) / scale,
     };
   }, []);
 
   const handlePointerDown = (event) => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    if (tool === 'pan') {
+      setIsPanning(true);
+      setIsDrawing(false);
+      const startX = (event.clientX - rect.left) * scaleX;
+      const startY = (event.clientY - rect.top) * scaleY;
+      const { offsetX, offsetY } = viewportRef.current;
+      panStateRef.current = {
+        startX,
+        startY,
+        originX: offsetX,
+        originY: offsetY,
+      };
+      canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+
     event.preventDefault();
-    const point = extractPoint(event);
+    const point = extractBoardPoint(event);
     if (!point) {
       return;
     }
+
+    const mode = tool;
     const stroke = {
-      color: brushColor,
+      color: mode === 'eraser' ? '#000000' : brushColor,
       size: brushSize,
+      opacity: mode === 'highlighter' ? 0.35 : 1,
+      mode,
       points: [point],
     };
     setActiveStroke(stroke);
     setIsDrawing(true);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.setPointerCapture(event.pointerId);
-    }
+    canvas.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event) => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    if (isPanning) {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const currentX = (event.clientX - rect.left) * scaleX;
+      const currentY = (event.clientY - rect.top) * scaleY;
+      const deltaX = currentX - panStateRef.current.startX;
+      const deltaY = currentY - panStateRef.current.startY;
+      setViewport((prev) => ({
+        scale: prev.scale,
+        offsetX: panStateRef.current.originX + deltaX,
+        offsetY: panStateRef.current.originY + deltaY,
+      }));
+      return;
+    }
+
     if (!isDrawing) {
       return;
     }
+
     event.preventDefault();
-    const point = extractPoint(event);
+    const point = extractBoardPoint(event);
     if (!point) {
       return;
     }
@@ -298,14 +448,16 @@ export default function Whiteboard() {
     async (stroke) => {
       try {
         setStatus('변경 사항을 저장하는 중입니다...');
-        await addDoc(collection(db, 'whiteboardSessions', BOARD_ID, 'strokes'), {
+        const docRef = await addDoc(collection(db, 'whiteboardSessions', BOARD_ID, 'strokes'), {
           color: stroke.color,
           size: stroke.size,
           opacity: stroke.opacity ?? 1,
           points: stroke.points,
+          mode: stroke.mode ?? 'pen',
           userId: user?.uid ?? 'guest',
           createdAt: serverTimestamp(),
         });
+        setLocalStrokeHistory((prev) => [...prev, docRef.id]);
         await updateDoc(sessionRef, {
           lastActivity: serverTimestamp(),
         });
@@ -320,17 +472,30 @@ export default function Whiteboard() {
   );
 
   const handlePointerUp = (event) => {
-    if (!isDrawing) {
+    const canvas = canvasRef.current;
+    if (!canvas) {
       return;
     }
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    if (canvas) {
+
+    if (isPanning) {
       try {
         canvas.releasePointerCapture(event.pointerId);
       } catch (err) {
-        // ignored
+        // ignore
       }
+      setIsPanning(false);
+      return;
+    }
+
+    if (!isDrawing) {
+      return;
+    }
+
+    event.preventDefault();
+    try {
+      canvas.releasePointerCapture(event.pointerId);
+    } catch (err) {
+      // ignore
     }
     setIsDrawing(false);
     setActiveStroke((prev) => {
@@ -342,7 +507,7 @@ export default function Whiteboard() {
   };
 
   const handlePointerLeave = (event) => {
-    if (isDrawing) {
+    if (isDrawing || isPanning) {
       handlePointerUp(event);
     }
   };
@@ -357,6 +522,7 @@ export default function Whiteboard() {
       await updateDoc(sessionRef, {
         lastActivity: serverTimestamp(),
       });
+      setLocalStrokeHistory([]);
       setStatus('동기화 완료');
     } catch (err) {
       console.error(err);
@@ -377,9 +543,85 @@ export default function Whiteboard() {
     link.click();
   };
 
+  const handleExportJSON = () => {
+    const payload = {
+      boardId: BOARD_ID,
+      exportedAt: new Date().toISOString(),
+      strokes: strokes.map((stroke) => ({
+        color: stroke.color,
+        size: stroke.size,
+        opacity: stroke.opacity ?? 1,
+        mode: stroke.mode ?? 'pen',
+        userId: stroke.userId ?? null,
+        points: stroke.points,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `whiteboard-strokes-${Date.now()}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  };
+
+  const handleUndo = async () => {
+    const lastStrokeId = localStrokeHistory.at(-1);
+    if (!lastStrokeId) {
+      return;
+    }
+    try {
+      setStatus('마지막 스트로크를 되돌리는 중입니다...');
+      await deleteDoc(doc(db, 'whiteboardSessions', BOARD_ID, 'strokes', lastStrokeId));
+      setLocalStrokeHistory((prev) => prev.slice(0, -1));
+      await updateDoc(sessionRef, {
+        lastActivity: serverTimestamp(),
+      });
+      setStatus('동기화 완료');
+    } catch (err) {
+      console.error(err);
+      setError('실행 취소 중 오류가 발생했습니다.');
+      setStatus('실행 취소 실패');
+    }
+  };
+
+  const applyZoom = useCallback((factor, focus) => {
+    setViewport((prev) => {
+      const nextScale = clampValue(prev.scale * factor, MIN_SCALE, MAX_SCALE);
+      if (nextScale === prev.scale) {
+        return prev;
+      }
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        return {
+          scale: nextScale,
+          offsetX: prev.offsetX,
+          offsetY: prev.offsetY,
+        };
+      }
+
+      const focusX = focus?.x ?? canvas.width / 2;
+      const focusY = focus?.y ?? canvas.height / 2;
+      const boardFocusX = (focusX - prev.offsetX) / prev.scale;
+      const boardFocusY = (focusY - prev.offsetY) / prev.scale;
+
+      return {
+        scale: nextScale,
+        offsetX: focusX - boardFocusX * nextScale,
+        offsetY: focusY - boardFocusY * nextScale,
+      };
+    });
+  }, []);
+
+  const handleZoomIn = () => applyZoom(1.2);
+  const handleZoomOut = () => applyZoom(0.8);
+  const handleResetViewport = () => {
+    setViewport({ scale: 1, offsetX: 0, offsetY: 0 });
+  };
+
   useEffect(() => {
     setError(null);
-  }, [brushColor, brushSize]);
+  }, [brushColor, brushSize, tool]);
 
   return (
     <div className="px-4 py-10 sm:px-6 lg:px-8">
@@ -396,6 +638,25 @@ export default function Whiteboard() {
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
               <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">도구</span>
+                <div className="flex overflow-hidden rounded-md border border-slate-200 dark:border-slate-600">
+                  {TOOL_OPTIONS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setTool(option.key)}
+                      className={`px-3 py-1.5 text-xs font-medium transition ${
+                        tool === option.key
+                          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <label htmlFor="brush-color" className="text-sm font-medium text-slate-700 dark:text-slate-200">
                   펜 색상
                 </label>
@@ -404,7 +665,10 @@ export default function Whiteboard() {
                   type="color"
                   value={brushColor}
                   onChange={(event) => setBrushColor(event.target.value)}
-                  className="h-9 w-14 cursor-pointer rounded border border-slate-200 dark:border-slate-600"
+                  disabled={tool === 'eraser'}
+                  className={`h-9 w-14 rounded border border-slate-200 dark:border-slate-600 ${
+                    tool === 'eraser' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                  }`}
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -415,27 +679,86 @@ export default function Whiteboard() {
                   id="brush-size"
                   type="range"
                   min="2"
-                  max="16"
+                  max="60"
+                  step="1"
                   value={brushSize}
                   onChange={(event) => setBrushSize(Number(event.target.value))}
                   className="h-9 w-32"
                 />
                 <span className="text-xs text-slate-500 dark:text-slate-400">{brushSize}px</span>
               </div>
-              <button
-                type="button"
-                onClick={handleClearBoard}
-                className="ml-auto inline-flex items-center gap-1 rounded-md bg-rose-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-600"
-              >
-                보드 초기화
-              </button>
-              <button
-                type="button"
-                onClick={handleExportBoard}
-                className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900"
-              >
-                PNG 내보내기
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={localStrokeHistory.length === 0}
+                  className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    localStrokeHistory.length === 0
+                      ? 'cursor-not-allowed bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                      : 'bg-slate-700 text-white hover:bg-slate-900 dark:bg-slate-200 dark:text-slate-900'
+                  }`}
+                >
+                  실행 취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGridEnabled((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-xs font-semibold transition ${
+                    gridEnabled
+                      ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  격자 {gridEnabled ? '끄기' : '켜기'}
+                </button>
+              </div>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-700 dark:border-slate-600 dark:text-slate-200">
+                  <button
+                    type="button"
+                    onClick={handleZoomOut}
+                    className="rounded px-2 py-1 transition hover:bg-slate-200 dark:hover:bg-slate-700"
+                  >
+                    -
+                  </button>
+                  <span className="min-w-[3.5rem] text-center">{Math.round(viewport.scale * 100)}%</span>
+                  <button
+                    type="button"
+                    onClick={handleZoomIn}
+                    className="rounded px-2 py-1 transition hover:bg-slate-200 dark:hover:bg-slate-700"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetViewport}
+                    className="rounded px-2 py-1 transition hover:bg-slate-200 dark:hover:bg-slate-700"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearBoard}
+                  className="inline-flex items-center gap-1 rounded-md bg-rose-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-600"
+                >
+                  보드 초기화
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportBoard}
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900"
+                >
+                  PNG 내보내기
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportJSON}
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                >
+                  JSON 내보내기
+                </button>
+              </div>
             </div>
 
             <div className="relative overflow-hidden rounded-b-xl" ref={containerRef}>
@@ -447,6 +770,7 @@ export default function Whiteboard() {
               <canvas
                 ref={canvasRef}
                 className="h-[540px] w-full touch-none"
+                style={{ cursor: canvasCursor }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}

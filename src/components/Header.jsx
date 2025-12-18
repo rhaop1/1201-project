@@ -50,7 +50,6 @@ export default function Header() {
     { to: '/concepts', label: '개념' },
     { to: '/papers', label: '논문 요약' },
     { to: '/whiteboard', label: '실시간 화이트보드' },
-    { to: '/virtual-lab', label: '가상 실험실' },
     { to: '/calculator', label: '계산기' },
     { to: '/forum', label: '게시판' },
     { to: '/glossary', label: '용어 사전' },
